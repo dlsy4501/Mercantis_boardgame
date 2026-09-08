@@ -78,6 +78,12 @@
   .bid-row{ display:flex; align-items:center; justify-content:center; gap:14px; margin:14px 0; }
   .bid-btn{ width:40px; height:40px; border-radius:50%; border:1px solid var(--gold); background:var(--panel-2); color:var(--gold); font-size:20px; font-weight:700; }
   .bid-value{ font-family:'Cinzel',serif; font-size:26px; font-weight:800; min-width:50px; text-align:center; }
+  .coin-strip{ display:flex; gap:8px; overflow-x:auto; padding:7px 2px; margin-bottom:10px;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .coin-chip{ flex:0 0 auto; font-size:11px; color:var(--cream-dim); background:var(--panel-2);
+    border-radius:20px; padding:4px 10px; white-space:nowrap; border:1px solid transparent; }
+  .coin-chip b{ color:var(--gold); font-family:'Cinzel',serif; font-weight:800; }
+  .coin-chip.me{ border-color:var(--gold); color:var(--cream); }
   .seat-circle{ position:relative; width:100%; max-width:340px; aspect-ratio:1/1; margin:6px auto 18px; }
   .seat-circle::before{ content:''; position:absolute; inset:16%; border:1px dashed var(--line); border-radius:50%; }
   .seat-circle-center{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
@@ -579,9 +585,16 @@ function gameHTML(){
   else if(me.hand.length===0) statusText = '낼 카드가 없습니다 — 국고 탕진 상태 (자동 관망 처리됩니다)';
   else if(alreadySubmitted) statusText = '제출 완료. 다른 상단의 결정을 기다리는 중...';
   else statusText = '이번 턴에 낼 병력 카드를 고르세요.';
+  const meta = gameMeta || {};
+  const coinStrip = state.seatOrder.map(t=>{
+    const m = meta[t];
+    if(!m) return '';
+    return `<div class="coin-chip${t===myTag?' me':''}">${t} <b>${m.coins}</b>코인</div>`;
+  }).join('');
   return `
     <h1>메르칸티스</h1>
     <div class="legend">턴 ${state.turn} · 유물함 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
+    ${coinStrip?`<div class="coin-strip">${coinStrip}</div>`:''}
     <div class="seat-circle">
       <div class="seat-circle-center">
         <div class="deck-pile"><div class="deck-card"></div><div class="deck-card"></div><div class="deck-card"></div></div>
