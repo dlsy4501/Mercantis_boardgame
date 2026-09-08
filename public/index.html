@@ -172,6 +172,12 @@ function joinRoom(){
 function hostStartGame(){
   socket.emit('start-game', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
 }
+function addBot(){
+  socket.emit('add-bot', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
+}
+function removeBot(botTag){
+  socket.emit('remove-bot', {tag: botTag}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
+}
 function adjustBid(delta){
   let v = myBid + delta;
   if(v<0) v=0;
@@ -305,9 +311,15 @@ function landingHTML(){
   `;
 }
 function lobbyHTML(){
-  const lobby = lastLobby || {players:[], hostTag:''};
-  const rows = lobby.players.map(t=>`<div class="player-row"><span>${t}${t===lobby.hostTag?'<span class="tag-host">호스트</span>':''}</span><span>${t===myTag?'(나)':''}</span></div>`).join('');
+  const lobby = lastLobby || {players:[], bots:[], hostTag:''};
+  const bots = lobby.bots || [];
+  const rows = lobby.players.map(t=>{
+    const isBot = bots.includes(t);
+    const removeBtn = (isHost && isBot) ? `<button class="ghost-btn" style="width:auto;padding:4px 10px;margin:0;font-size:12px;" data-remove-bot="${t}">제거</button>` : '';
+    return `<div class="player-row"><span>${t}${t===lobby.hostTag?'<span class="tag-host">호스트</span>':''}${isBot?'<span class="tag-host">봇</span>':''}</span><span style="display:flex;align-items:center;gap:8px;">${t===myTag?'(나)':''}${removeBtn}</span></div>`;
+  }).join('');
   const canStart = isHost && lobby.players.length>=3 && lobby.players.length<=6;
+  const canAddBot = isHost && lobby.players.length<6;
   return `
     <h1>상단 연합 대기실</h1>
     <div class="sub">${connDot()}</div>
@@ -315,6 +327,8 @@ function lobbyHTML(){
     <div class="code-display">${roomCode}</div>
     <div class="card-box">${rows}<div class="sub" style="margin-top:8px;">${lobby.players.length}/6개 상단 참가 중 (최소 3개 상단 필요)</div></div>
     ${isHost ? `
+      <button class="ghost-btn" id="add-bot-btn" ${canAddBot?'':'disabled'}>🤖 봇 추가</button>
+      <div class="sub" style="text-align:center;">인원이 부족하면 봇을 원하는 만큼 추가해 채울 수 있습니다.</div>
       <button class="primary-btn" id="start-game-btn" ${canStart?'':'disabled'}>게임 시작</button>
       <div class="sub" style="text-align:center;">${canStart?'':'최소 3개 상단이 모여야 시작할 수 있습니다.'}</div>`
       : `<div class="sub" style="text-align:center;">호스트(${lobby.hostTag})가 전쟁을 시작하기를 기다리는 중...</div>`}
@@ -410,6 +424,10 @@ function attachHandlers(){
   const c2=document.getElementById('join-btn'); if(c2) c2.onclick=joinRoom;
   const c3=document.getElementById('start-game-btn'); if(c3) c3.onclick=hostStartGame;
   const c4=document.getElementById('reload-btn'); if(c4) c4.onclick=()=>location.reload();
+  const ab=document.getElementById('add-bot-btn'); if(ab) ab.onclick=addBot;
+  document.querySelectorAll('[data-remove-bot]').forEach(el=>{
+    el.onclick = ()=>removeBot(el.dataset.removeBot);
+  });
   const bm=document.getElementById('bid-minus'); if(bm) bm.onclick=()=>adjustBid(-1);
   const bp=document.getElementById('bid-plus'); if(bp) bp.onclick=()=>adjustBid(1);
   const sb=document.getElementById('submit-bid-btn'); if(sb) sb.onclick=submitBid;

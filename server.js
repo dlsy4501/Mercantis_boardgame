@@ -3,7 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const {
-  createGameState, resolveTurn, freshMeta,
+  createGameState, resolveTurn, defaultAction, freshMeta,
   computeStandings, awardCoins, awardLandIncome,
   pickRandomLandYield, resolveLandAuction, checkGoalReached,
   GOAL_COINS
@@ -12,6 +12,7 @@ const {
 const PORT = process.env.PORT || 3000;
 const TURN_TIMEOUT_MS = 25000;
 const BID_TIMEOUT_MS = 20000;
+const BOT_AUTO_BID = 2; // 봇이 경매에서 자동으로 제시하는 고정 입찰액
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -19,7 +20,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 // rooms[code] = {
-//   hostTag, players: [tag,...], status: 'waiting'|'playing'|'over',
+//   hostTag, players: [tag,...], bots: Set<tag>, status: 'waiting'|'playing'|'over',
 //   meta: { tag: {coins, lands} },   // 게임 시작부터 끝까지 유지되는 코인/영토 정보
 //   state: <체인게임 현재 라운드 상태 or null>, pendingActions: {},
 //   auction: { yieldValue, bids, bidStartedAt } | null
@@ -36,7 +37,7 @@ function genCode() {
 }
 
 function publicLobby(room) {
-  return { hostTag: room.hostTag, players: room.players, status: room.status };
+  return { hostTag: room.hostTag, players: room.players, bots: Array.from(room.bots), status: room.status };
 }
 function broadcastLobby(code) {
   const room = rooms[code];
@@ -54,6 +55,43 @@ function broadcastAuction(code) {
   io.to(code).emit('land-auction', {
     yieldValue: room.auction.yieldValue, meta: room.meta,
     bidTags: Object.keys(room.auction.bids)
+  });
+}
+
+// 봇은 사람의 제출을 기다리지 않도록, 턴이 시작되자마자 기본 행동(가장 약한 침공 카드,
+// 없으면 방벽/근위대)을 즉시 제출해둔다.
+function autoSubmitBotActions(code) {
+  const room = rooms[code];
+  if (!room || !room.state) return;
+  const state = room.state;
+  state.seatOrder.forEach(t => {
+    if (!room.bots.has(t)) return;
+    const p = state.players[t];
+    if (!p.alive || p.hand.length === 0) return;
+    if (room.pendingActions[t] !== undefined) return;
+    const action = defaultAction(p);
+    room.pendingActions[t] = { type: action.type, cardId: action.card ? action.card.id : null };
+  });
+}
+
+// 새 턴이 시작될 때 공통으로 호출: 봇 행동 채우기 → 브로드캐스트 → 타임아웃 예약 →
+// (사람 없이 봇끼리만 남은 경우를 대비해) 즉시 해소 가능한지 재확인
+function startTurn(code) {
+  autoSubmitBotActions(code);
+  broadcastState(code);
+  scheduleTimeoutCheck(code);
+  tryResolveTurn(code, false);
+}
+
+// 봇은 경매에서도 사람을 기다리지 않도록, 여유가 있으면 고정액을 자동으로 입찰해둔다.
+function autoSubmitBotBids(code) {
+  const room = rooms[code];
+  if (!room || !room.auction) return;
+  room.players.forEach(t => {
+    if (!room.bots.has(t)) return;
+    if (room.auction.bids[t] !== undefined) return;
+    const coins = room.meta[t] ? room.meta[t].coins : 0;
+    room.auction.bids[t] = coins >= BOT_AUTO_BID ? BOT_AUTO_BID : 0;
   });
 }
 
@@ -86,8 +124,7 @@ function tryResolveTurn(code, forceTimeout) {
   if (state.phase === 'over') {
     finishRound(code);
   } else {
-    broadcastState(code);
-    scheduleTimeoutCheck(code);
+    startTurn(code);
   }
 }
 
@@ -119,8 +156,10 @@ function startNextAuction(code) {
     bidStartedAt: Date.now()
   };
   room.pendingActions = {};
+  autoSubmitBotBids(code);
   broadcastAuction(code);
   scheduleBidTimeoutCheck(code);
+  tryResolveBids(code, false);
 }
 
 function scheduleBidTimeoutCheck(code) {
@@ -145,8 +184,7 @@ function tryResolveBids(code, forceTimeout) {
   // 다음 체인게임 라운드 시작
   room.state = createGameState(room.players.slice());
   room.pendingActions = {};
-  broadcastState(code);
-  scheduleTimeoutCheck(code);
+  startTurn(code);
 }
 
 /* ================= 소켓 이벤트 ================= */
@@ -159,7 +197,7 @@ io.on('connection', (socket) => {
     if (!tag) return cb({ ok: false, error: '상단 이름을 입력하세요.' });
     const code = genCode();
     rooms[code] = {
-      hostTag: tag, players: [tag], status: 'waiting',
+      hostTag: tag, players: [tag], bots: new Set(), status: 'waiting',
       meta: {}, state: null, pendingActions: {}, auction: null
     };
     socket.data.tag = tag; socket.data.code = code;
@@ -183,12 +221,43 @@ io.on('connection', (socket) => {
     broadcastLobby(code);
   });
 
+  // 호스트가 로비에서 봇 상단을 추가 (사람 3명이 모이지 않아도 봇으로 채워 시작 가능)
+  socket.on('add-bot', (_, cb) => {
+    const code = socket.data.code, tag = socket.data.tag;
+    const room = rooms[code];
+    if (!room) return cb && cb({ ok: false, error: '방을 찾을 수 없습니다.' });
+    if (room.hostTag !== tag) return cb && cb({ ok: false, error: '호스트만 봇을 추가할 수 있습니다.' });
+    if (room.status !== 'waiting') return cb && cb({ ok: false, error: '이미 시작된 방입니다.' });
+    if (room.players.length >= 6) return cb && cb({ ok: false, error: '이 방은 가득 찼습니다 (최대 6개 상단).' });
+    let n = 1;
+    let botTag = `봇 ${n}`;
+    while (room.players.includes(botTag)) { n++; botTag = `봇 ${n}`; }
+    room.players.push(botTag);
+    room.bots.add(botTag);
+    cb && cb({ ok: true, tag: botTag });
+    broadcastLobby(code);
+  });
+
+  // 호스트가 로비에서 추가했던 봇을 제거
+  socket.on('remove-bot', ({ tag: botTag }, cb) => {
+    const code = socket.data.code, tag = socket.data.tag;
+    const room = rooms[code];
+    if (!room) return cb && cb({ ok: false, error: '방을 찾을 수 없습니다.' });
+    if (room.hostTag !== tag) return cb && cb({ ok: false, error: '호스트만 봇을 제거할 수 있습니다.' });
+    if (room.status !== 'waiting') return cb && cb({ ok: false, error: '이미 시작된 방입니다.' });
+    if (!room.bots.has(botTag)) return cb && cb({ ok: false, error: '해당 봇을 찾을 수 없습니다.' });
+    room.players = room.players.filter(p => p !== botTag);
+    room.bots.delete(botTag);
+    cb && cb({ ok: true });
+    broadcastLobby(code);
+  });
+
   socket.on('start-game', (_, cb) => {
     const code = socket.data.code, tag = socket.data.tag;
     const room = rooms[code];
     if (!room) return cb && cb({ ok: false, error: '방을 찾을 수 없습니다.' });
     if (room.hostTag !== tag) return cb && cb({ ok: false, error: '호스트만 시작할 수 있습니다.' });
-    if (room.players.length < 3 || room.players.length > 6) return cb && cb({ ok: false, error: '3~6개 상단이 필요합니다.' });
+    if (room.players.length < 3 || room.players.length > 6) return cb && cb({ ok: false, error: '3~6개 상단이 필요합니다 (봇으로 채워도 됩니다).' });
     const meta = {};
     room.players.forEach(t => { meta[t] = freshMeta(); });
     room.meta = meta;
@@ -198,8 +267,7 @@ io.on('connection', (socket) => {
     room.auction = null;
     cb && cb({ ok: true });
     broadcastLobby(code);
-    broadcastState(code);
-    scheduleTimeoutCheck(code);
+    startTurn(code);
   });
 
   // 영토 경매 입찰

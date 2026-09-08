@@ -39,6 +39,8 @@ README.md                     실행/배포 안내
 - `room.state` : 현재 진행 중인 체인게임 라운드 상태 (매 라운드 `createGameState`로 새로 생성)
 - `room.meta`  : 게임 시작부터 끝까지 유지되는 상단별 `{ coins, lands }` (코인·보유 영토)
 - `room.auction` : 영토 경매 진행 중일 때만 존재하는 `{ yieldValue, bids, bidStartedAt }`
+- `room.bots` : 봇으로 채운 상단 태그 집합(`Set`). 로비 상태(`waiting`)일 때만 호스트가 `add-bot`/`remove-bot`으로 조정 가능. `room.players`에는 사람과 봇 태그가 함께 들어가므로, 시작 조건(3~6개 상단)은 사람 수와 무관하게 총원 기준으로 그대로 적용됨.
+- 봇 자동 처리: `startTurn(code)`가 매 턴 시작 시 `autoSubmitBotActions`로 살아있는 봇의 카드 액션을(`defaultAction` 재사용 — 가장 약한 침공, 없으면 방벽/근위대) 즉시 `room.pendingActions`에 채워 넣고, `startNextAuction(code)`가 `autoSubmitBotBids`로 봇의 입찰(여유 있으면 고정 `BOT_AUTO_BID`코인, 아니면 0=포기)을 즉시 채워 넣는다. 그 덕에 `tryResolveTurn`/`tryResolveBids`는 사람 플레이어의 제출만 실제로 기다리면 된다 — 봇을 위한 별도 대기/타임아웃 로직은 없음.
 
 ## 2. 체인게임 규칙 (`game-logic.js`)
 
@@ -64,7 +66,8 @@ README.md                     실행/배포 안내
 | 이벤트 | 방향 | 용도 |
 |---|---|---|
 | `create-room` / `join-room` | client→server | 방 생성/참가 |
-| `lobby-update` | server→client | 로비 인원/상태 갱신 |
+| `lobby-update` | server→client | 로비 인원/상태 갱신 (`bots` 배열 포함) |
+| `add-bot` / `remove-bot` | client→server | 호스트가 로비에서 봇 상단 추가/제거 (사람 3명이 없어도 봇으로 채워 시작 가능) |
 | `start-game` | client→server | 호스트가 게임 시작 (전초전 없이 바로 단일 루프 진입) |
 | `state-update` | server→client | 체인게임 라운드 상태(`state`) + 코인/영토 메타(`meta`) 갱신 |
 | `submit-action` / `submission-update` | 양방향 | 카드 제출 및 제출 현황 알림 |
