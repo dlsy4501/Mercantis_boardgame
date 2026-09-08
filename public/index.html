@@ -78,6 +78,19 @@
   .goal-bar{ background:var(--panel-2); border-radius:8px; height:8px; overflow:hidden; margin:6px 0 2px; }
   .goal-bar-fill{ background:var(--gold); height:100%; }
   .goal-text{ text-align:center; font-size:12px; color:var(--gold); margin-bottom:8px; }
+  .seat-circle{ position:relative; width:100%; max-width:340px; aspect-ratio:1/1; margin:6px auto 18px; }
+  .seat-circle::before{ content:''; position:absolute; inset:16%; border:1px dashed var(--line); border-radius:50%; }
+  .seat-circle-center{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+  .seat-circle-center .turn-num{ font-family:'Cinzel',serif; font-size:24px; font-weight:800; color:var(--gold); line-height:1; }
+  .seat-circle-center .turn-label{ font-size:10px; color:var(--cream-dim); margin-top:2px; }
+  .seat{ position:absolute; width:84px; transform:translate(-50%,-50%); text-align:center;
+    background:var(--panel); border:1.5px solid var(--line); border-radius:12px; padding:6px 4px; }
+  .seat.seat-me{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
+  .seat.seat-dead{ opacity:0.35; }
+  .seat .seat-name{ font-size:11.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .seat .seat-info{ font-size:10px; color:var(--cream-dim); margin-top:2px; line-height:1.3; }
+  .seat .seat-mark{ font-size:10px; margin-top:2px; display:block; font-weight:700; }
+  .seat .seat-mark.a{ color:var(--attack); } .seat .seat-mark.c{ color:var(--coop); }
 </style>
 </head>
 <body>
@@ -370,14 +383,32 @@ function gameHTML(){
   const myCoins = meta[myTag] ? meta[myTag].coins : 0;
   const myLands = meta[myTag] ? meta[myTag].lands.length : 0;
   const goalPct = Math.min(100, Math.round(myCoins / GOAL_COINS * 100));
-  const rows = state.seatOrder.map(t=>{
+  const n = state.seatOrder.length;
+  const myIndex = Math.max(0, state.seatOrder.indexOf(myTag));
+  const radiusPct = 35;
+  const leftTag = nextAliveTag(state, myTag);
+  const rightTag = prevAliveTag(state, myTag);
+  const seatsHTML = state.seatOrder.map((t, i)=>{
     const p = state.players[t];
-    const isLeft = nextAliveTag(state, myTag)===t && p.alive;
-    const isRight = prevAliveTag(state, myTag)===t && p.alive;
-    const cls = !p.alive ? 'status-dead' : '';
-    const mark = isLeft ? ' <b class="a">◀침공대상</b>' : (isRight ? ' <b class="c">▶회유대상</b>' : '');
+    // 원형 좌석: 나를 맨 아래(6시 방향)에 고정하고, seatOrder 순서(=왼쪽 방향)대로 시계 방향으로 배치
+    const offset = (i - myIndex + n) % n;
+    const angleDeg = 180 + offset * (360 / n);
+    const rad = angleDeg * Math.PI / 180;
+    const x = (50 + radiusPct * Math.sin(rad)).toFixed(1);
+    const y = (50 - radiusPct * Math.cos(rad)).toFixed(1);
+    const isMe = t === myTag;
+    const isLeft = !isMe && leftTag === t && p.alive;
+    const isRight = !isMe && rightTag === t && p.alive;
+    const cls = ['seat'];
+    if(isMe) cls.push('seat-me');
+    if(!p.alive) cls.push('seat-dead');
+    const mark = isLeft ? '<span class="seat-mark a">◀침공대상</span>' : (isRight ? '<span class="seat-mark c">▶회유대상</span>' : '');
     const coinInfo = meta[t] ? ` · ${meta[t].coins}코인` : '';
-    return `<div class="player-row ${cls}"><span>${t}${t===myTag?' (나)':''}${mark}</span><span>혼란도 ${p.score} · 병력 ${p.alive?p.hand.length:'💀'}${p.shield>0?' 🛡':''}${coinInfo}</span></div>`;
+    return `<div class="${cls.join(' ')}" style="left:${x}%;top:${y}%;">
+      <div class="seat-name">${t}${isMe?' (나)':''}</div>
+      <div class="seat-info">혼란도 ${p.score} · ${p.alive?p.hand.length+'장':'💀'}${p.shield>0?' 🛡':''}${coinInfo}</div>
+      ${mark}
+    </div>`;
   }).join('');
   let handHTML = '';
   if(me && me.alive){
@@ -398,7 +429,10 @@ function gameHTML(){
     <div class="legend">턴 ${state.turn} · 유물함 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
     <div class="goal-bar"><div class="goal-bar-fill" style="width:${goalPct}%;"></div></div>
     <div class="goal-text">우리 상단 코인 ${myCoins} / ${GOAL_COINS} · 보유 영토 ${myLands}개</div>
-    <div class="card-box">${rows}</div>
+    <div class="seat-circle">
+      <div class="seat-circle-center"><div class="turn-num">${state.turn}</div><div class="turn-label">턴</div></div>
+      ${seatsHTML}
+    </div>
     <div id="status-line">${statusText}</div>
     <div id="log">${state.log.slice(-30).map(m=>`<div>${m}</div>`).join('')}</div>
     <div id="hand">${handHTML || '<div class="sub">해당 없음</div>'}</div>
