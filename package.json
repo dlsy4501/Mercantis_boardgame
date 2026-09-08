@@ -1,0 +1,16 @@
+{
+  "name": "chain-of-thrones-server",
+  "version": "1.0.0",
+  "description": "체인 오브 스론 멀티플레이 서버 (Express + Socket.io)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
