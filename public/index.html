@@ -70,13 +70,14 @@
   #modal .no{ background:var(--panel-2); color:var(--cream); border:1px solid var(--line); }
   .conn-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
   .conn-ok{ background:#5b8a4c; } .conn-bad{ background:var(--attack); }
-  .rune-display{ text-align:center; font-size:44px; margin:8px 0 4px; }
-  .rune-name{ text-align:center; font-family:'Noto Serif KR',serif; font-weight:800; font-size:16px; margin-bottom:10px; }
+  .land-display{ text-align:center; font-size:44px; margin:8px 0 4px; }
+  .land-name{ text-align:center; font-family:'Noto Serif KR',serif; font-weight:800; font-size:16px; margin-bottom:10px; }
   .bid-row{ display:flex; align-items:center; justify-content:center; gap:14px; margin:14px 0; }
   .bid-btn{ width:40px; height:40px; border-radius:50%; border:1px solid var(--gold); background:var(--panel-2); color:var(--gold); font-size:20px; font-weight:700; }
   .bid-value{ font-family:'Cinzel',serif; font-size:26px; font-weight:800; min-width:50px; text-align:center; }
-  .pregame-banner{ text-align:center; font-size:11.5px; color:var(--gold); border:1px dashed var(--gold);
-    border-radius:8px; padding:4px 8px; margin-bottom:8px; }
+  .goal-bar{ background:var(--panel-2); border-radius:8px; height:8px; overflow:hidden; margin:6px 0 2px; }
+  .goal-bar-fill{ background:var(--gold); height:100%; }
+  .goal-text{ text-align:center; font-size:12px; color:var(--gold); margin-bottom:8px; }
 </style>
 </head>
 <body>
@@ -85,11 +86,13 @@
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
+const GOAL_COINS = 20;
 const socket = io();
 let myTag = '', roomCode = '', isHost = false;
-let phase = 'landing'; // landing | lobby | mini | auction | game | over
-let lastLobby = null, lastState = null;
-let pregameMeta = null, pregameRune = null, lastAuctionMsg = '', lastRoundMsg = '';
+let phase = 'landing'; // landing | lobby | game | auction | over
+let lastLobby = null, lastState = null, gameMeta = null;
+let auctionYield = null, lastAuctionMsg = '', lastRoundMsg = '';
+let gameOverWinner = null;
 let submittedThisTurn = -1;
 let myBid = 0;
 let bidSubmitted = false;
@@ -103,36 +106,32 @@ socket.on('lobby-update', (lobby)=>{
   if(lobby.status==='waiting') phase='lobby';
   render();
 });
-socket.on('pregame-auction', ({rune, meta})=>{
-  pregameRune = rune; pregameMeta = meta; myBid = 0; bidSubmitted = false;
-  phase = 'auction';
-  render();
-});
-socket.on('pregame-auction-result', ({msg, meta})=>{
-  lastAuctionMsg = msg; pregameMeta = meta;
-  render();
-});
-socket.on('pregame-round-result', ({msg, meta})=>{
-  lastRoundMsg = msg; pregameMeta = meta;
-  render();
-});
-socket.on('pregame-state-update', ({state, meta})=>{
-  lastState = state; pregameMeta = meta;
-  phase = 'mini';
-  render();
-});
-socket.on('pregame-summary', ({meta})=>{
-  pregameMeta = meta;
-  phase = 'summary';
-  render();
-});
-socket.on('state-update', (state)=>{
-  lastState = state;
-  phase = state.phase==='over' ? 'over' : 'game';
+socket.on('state-update', ({state, meta})=>{
+  if(state.turn===1) submittedThisTurn = -1; // 새 라운드 시작 — 이전 라운드의 제출 기록 초기화
+  lastState = state; gameMeta = meta;
+  phase = 'game';
   render();
 });
 socket.on('submission-update', ()=>{ render(); });
+socket.on('round-result', ({msg, meta})=>{
+  lastRoundMsg = msg; gameMeta = meta;
+  render();
+});
+socket.on('land-auction', ({yieldValue, meta})=>{
+  auctionYield = yieldValue; gameMeta = meta; myBid = 0; bidSubmitted = false;
+  phase = 'auction';
+  render();
+});
 socket.on('bid-submission-update', ()=>{ render(); });
+socket.on('land-auction-result', ({msg, meta})=>{
+  lastAuctionMsg = msg; gameMeta = meta;
+  render();
+});
+socket.on('game-over', ({winnerTag, meta})=>{
+  gameOverWinner = winnerTag; gameMeta = meta;
+  phase = 'over';
+  render();
+});
 
 function cardLabel(c){
   if(c.type==='attack') return {label:'침공/밀약', extra:c.value};
@@ -173,13 +172,10 @@ function joinRoom(){
 function hostStartGame(){
   socket.emit('start-game', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
 }
-function hostStartPregame(){
-  socket.emit('start-pregame', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
-}
 function adjustBid(delta){
   let v = myBid + delta;
   if(v<0) v=0;
-  const cap = (pregameMeta && pregameMeta[myTag]) ? pregameMeta[myTag].coins : 0;
+  const cap = (gameMeta && gameMeta[myTag]) ? gameMeta[myTag].coins : 0;
   if(v>cap) v=cap;
   myBid = v;
   render();
@@ -282,9 +278,7 @@ function render(){
   if(phase==='landing') app.innerHTML = landingHTML();
   else if(phase==='lobby') app.innerHTML = lobbyHTML();
   else if(phase==='auction') app.innerHTML = auctionHTML();
-  else if(phase==='mini') app.innerHTML = gameHTML(true);
-  else if(phase==='summary') app.innerHTML = summaryHTML();
-  else if(phase==='game') app.innerHTML = gameHTML(false);
+  else if(phase==='game') app.innerHTML = gameHTML();
   else if(phase==='over') app.innerHTML = overHTML();
   attachHandlers();
 }
@@ -321,66 +315,55 @@ function lobbyHTML(){
     <div class="code-display">${roomCode}</div>
     <div class="card-box">${rows}<div class="sub" style="margin-top:8px;">${lobby.players.length}/6개 상단 참가 중 (최소 3개 상단 필요)</div></div>
     ${isHost ? `
-      <button class="primary-btn" id="start-pregame-btn" ${canStart?'':'disabled'}>암중 전초전부터 시작</button>
-      <button class="ghost-btn" id="start-game-btn" ${canStart?'':'disabled'}>전초전 건너뛰고 바로 전면전</button>
+      <button class="primary-btn" id="start-game-btn" ${canStart?'':'disabled'}>게임 시작</button>
       <div class="sub" style="text-align:center;">${canStart?'':'최소 3개 상단이 모여야 시작할 수 있습니다.'}</div>`
       : `<div class="sub" style="text-align:center;">호스트(${lobby.hostTag})가 전쟁을 시작하기를 기다리는 중...</div>`}
     ${errorMsg?`<div class="sub" style="color:var(--attack);text-align:center;">${errorMsg}</div>`:''}
   `;
 }
 function auctionHTML(){
-  const meta = pregameMeta || {};
+  const meta = gameMeta || {};
   const myCoins = meta[myTag] ? meta[myTag].coins : 0;
   const isInvalid = myBid===1;
   const rows = Object.keys(meta).map(t=>`
-    <div class="player-row"><span>${t} ${meta[t].passive?'(각성 완료)':''}</span><span>${meta[t].coins}금화 · 유물 ${meta[t].runes.length}개</span></div>
+    <div class="player-row"><span>${t}</span><span>${meta[t].coins}코인 · 영토 ${meta[t].lands.length}개</span></div>
   `).join('');
   return `
-    <h1>🏺 고대 유물 경매</h1>
+    <h1>🏞 영토 경매</h1>
     <div class="sub">${connDot()}</div>
     ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
     ${lastAuctionMsg?`<div class="sub" style="text-align:center;">${lastAuctionMsg}</div>`:''}
     <div class="card-box">
-      <div class="rune-display">${pregameRune?pregameRune.icon:''}</div>
-      <div class="rune-name">${pregameRune?pregameRune.name:''}</div>
-      <div class="sub" style="text-align:center;font-size:12px;">${pregameRune?pregameRune.desc:''}</div>
-      <div class="sub" style="text-align:center;font-size:12px;">같은 유물 2개를 모으면 상단의 비의가 각성합니다.</div>
+      <div class="land-display">🏞</div>
+      <div class="land-name">새 영토 — 예상 수익 +${auctionYield}코인/라운드</div>
+      <div class="sub" style="text-align:center;font-size:12px;">낙찰받으면 이 영토를 보유하는 한 매 라운드 ${auctionYield}코인이 들어옵니다.</div>
       <div class="bid-row">
         <button class="bid-btn" id="bid-minus">−</button>
         <div class="bid-value">${myBid}</div>
         <button class="bid-btn" id="bid-plus">+</button>
       </div>
-      <div class="sub" style="text-align:center;font-size:11.5px;">우리 상단 금고: ${myCoins}닢 · 최소 입찰 2금화 (0=포기) · 낙찰 실패해도 회수 불가</div>
-      ${isInvalid?`<div class="sub" style="text-align:center;color:var(--attack);">1금화로는 로비할 수 없습니다.</div>`:''}
+      <div class="sub" style="text-align:center;font-size:11.5px;">우리 상단 코인: ${myCoins} · 최소 입찰 2코인 (0=포기) · 낙찰 실패해도 회수 불가</div>
+      ${isInvalid?`<div class="sub" style="text-align:center;color:var(--attack);">1코인으로는 입찰할 수 없습니다.</div>`:''}
       <button class="primary-btn" id="submit-bid-btn" ${isInvalid || bidSubmitted?'disabled':''}>${bidSubmitted?'제출 완료 — 대기 중':'입찰 확정'}</button>
     </div>
     <div class="card-box">${rows}</div>
   `;
 }
-function summaryHTML(){
-  const meta = pregameMeta || {};
-  const rows = Object.keys(meta).map(t=>`
-    <div class="player-row"><span>${t}</span><span>${meta[t].passive?meta[t].passive:'비의 없음'} · 금화 ${meta[t].coins} · 1·2위 ${meta[t].top2Count}회</span></div>
-  `).join('');
-  return `
-    <h1>🎲 전초전 종결</h1>
-    <div class="sub">${connDot()}</div>
-    <div class="card-box">
-      <div class="sub">조건을 달성한 상단이 나와 전초전이 종결되었습니다. 곧 전면전이 시작됩니다...</div>
-      <div>${rows}</div>
-    </div>
-  `;
-}
-function gameHTML(isPregame){
+function gameHTML(){
   const state = lastState;
   const me = myPlayer();
+  const meta = gameMeta || {};
+  const myCoins = meta[myTag] ? meta[myTag].coins : 0;
+  const myLands = meta[myTag] ? meta[myTag].lands.length : 0;
+  const goalPct = Math.min(100, Math.round(myCoins / GOAL_COINS * 100));
   const rows = state.seatOrder.map(t=>{
     const p = state.players[t];
     const isLeft = nextAliveTag(state, myTag)===t && p.alive;
     const isRight = prevAliveTag(state, myTag)===t && p.alive;
     const cls = !p.alive ? 'status-dead' : '';
     const mark = isLeft ? ' <b class="a">◀침공대상</b>' : (isRight ? ' <b class="c">▶회유대상</b>' : '');
-    return `<div class="player-row ${cls}"><span>${t}${t===myTag?' (나)':''}${mark}</span><span>혼란도 ${p.score} · 병력 ${p.alive?p.hand.length:'💀'}${p.shield>0?' 🛡':''}</span></div>`;
+    const coinInfo = meta[t] ? ` · ${meta[t].coins}코인` : '';
+    return `<div class="player-row ${cls}"><span>${t}${t===myTag?' (나)':''}${mark}</span><span>혼란도 ${p.score} · 병력 ${p.alive?p.hand.length:'💀'}${p.shield>0?' 🛡':''}${coinInfo}</span></div>`;
   }).join('');
   let handHTML = '';
   if(me && me.alive){
@@ -398,8 +381,9 @@ function gameHTML(isPregame){
   else statusText = '이번 턴에 낼 병력 카드를 고르세요.';
   return `
     <h1>메르칸티스</h1>
-    ${isPregame?`<div class="pregame-banner">🎲 암중 전초전 진행 중</div>`:''}
     <div class="legend">턴 ${state.turn} · 유물함 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
+    <div class="goal-bar"><div class="goal-bar-fill" style="width:${goalPct}%;"></div></div>
+    <div class="goal-text">우리 상단 코인 ${myCoins} / ${GOAL_COINS} · 보유 영토 ${myLands}개</div>
     <div class="card-box">${rows}</div>
     <div id="status-line">${statusText}</div>
     <div id="log">${state.log.slice(-30).map(m=>`<div>${m}</div>`).join('')}</div>
@@ -407,15 +391,14 @@ function gameHTML(isPregame){
   `;
 }
 function overHTML(){
-  const state = lastState;
-  const table = state.seatOrder.map(t=>{
-    const p = state.players[t];
-    return `<div class="player-row"><span>${t}${p.alive?'':' 💀'}</span><span>혼란도 ${p.score}</span></div>`;
+  const meta = gameMeta || {};
+  const table = Object.keys(meta).map(t=>{
+    return `<div class="player-row"><span>${t}${t===gameOverWinner?' 🏆':''}</span><span>${meta[t].coins}코인 · 영토 ${meta[t].lands.length}개</span></div>`;
   }).join('');
   return `
     <h1>메르칸티스</h1>
     <div class="card-box">
-      <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${state.winnerTags.join(', ')}, 교역의 패자가 되다!</h3>
+      <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${gameOverWinner}, 목표 코인 ${GOAL_COINS} 달성으로 교역의 패자가 되다!</h3>
       <div>${table}</div>
     </div>
     <button class="primary-btn" id="reload-btn">새 상단 연합 열기</button>
@@ -426,7 +409,6 @@ function attachHandlers(){
   const rb=document.getElementById('rules-btn'); if(rb) rb.onclick=showRulesModal;
   const c2=document.getElementById('join-btn'); if(c2) c2.onclick=joinRoom;
   const c3=document.getElementById('start-game-btn'); if(c3) c3.onclick=hostStartGame;
-  const c3b=document.getElementById('start-pregame-btn'); if(c3b) c3b.onclick=hostStartPregame;
   const c4=document.getElementById('reload-btn'); if(c4) c4.onclick=()=>location.reload();
   const bm=document.getElementById('bid-minus'); if(bm) bm.onclick=()=>adjustBid(-1);
   const bp=document.getElementById('bid-plus'); if(bp) bp.onclick=()=>adjustBid(1);

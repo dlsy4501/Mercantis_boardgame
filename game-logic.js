@@ -1,16 +1,10 @@
 // 메르칸티스 - 핵심 게임 로직 (서버 전용, 순수 함수 위주)
 const ELIM_SCORE = 24;
-
-const RUNES = [
-  { id: 'venom', icon: '🐍', name: '독배의 인장', desc: '왼쪽 상단 침공 성공 시, 3턴 동안 매 턴 고정 피해 1 추가(무시 불가)' },
-  { id: 'wall', icon: '🛡', name: '선조의 갑주', desc: '전쟁이 끝날 때까지 받는 모든 침공 피해 1 영구 감소' },
-  { id: 'informant', icon: '👁', name: '밀정의 눈', desc: '오른쪽 상단(나를 침공하는 상단)의 병력 정보를 항상 열람' },
-  { id: 'revenge', icon: '⚔', name: '피의 맹세', desc: '내 상단이 파산하면, 파산시킨 상단이 즉시 혼란도 5 추가로 받음' },
-  { id: 'dealmaker', icon: '🤝', name: '이중 밀약', desc: '밀약 시 혼란도 회복량이 2회까지 2배(2점)로 증가' }
-];
-const EXIT_TOP2_TARGET = 3;
-const EXIT_RUNE_TARGET = 3;
 const COIN_TABLE = [3, 3, 2, 0, 0, 0];
+const START_COINS = 3;
+const GOAL_COINS = 20;
+const LAND_YIELD_MIN = 1;
+const LAND_YIELD_MAX = 3;
 
 function buildDeck() {
   const d = [];
@@ -48,11 +42,11 @@ function prevAliveTag(state, tag) {
 }
 
 function freshMeta() {
-  return { coins: 3, runes: [], top2Count: 0, passive: null };
+  return { coins: START_COINS, lands: [] };
 }
 
-// meta: { tag: {coins, runes, top2Count, passive} } - 있으면 패시브를 플레이어에 적용
-function createGameState(seatOrder, meta) {
+// 체인게임 한 라운드의 초기 상태를 만든다 (패시브/유물 없음)
+function createGameState(seatOrder) {
   const n = seatOrder.length;
   const startHand = n <= 4 ? 7 : 5;
   const deck = buildDeck();
@@ -60,21 +54,13 @@ function createGameState(seatOrder, meta) {
   seatOrder.forEach(tag => {
     const hand = [];
     for (let k = 0; k < startHand; k++) { const c = deck.pop(); if (c) hand.push(c); }
-    const passive = meta && meta[tag] ? meta[tag].passive : null;
-    players[tag] = {
-      score: 0, hand, shield: 0, alive: true,
-      hasWall: passive === 'wall',
-      hasVenom: passive === 'venom',
-      hasRevenge: passive === 'revenge',
-      isInformant: passive === 'informant',
-      dealFreeUses: passive === 'dealmaker' ? 2 : 0
-    };
+    players[tag] = { score: 0, hand, shield: 0, alive: true };
   });
   return {
     seatOrder, players, deck, turn: 1, turnStartedAt: Date.now(),
     log: [`${n}개 상단의 전쟁 개시. 매 턴 전원이 병력 카드를 동시에 공개합니다.`],
     phase: 'playing', winnerTags: [],
-    eliminationOrder: [], poison: {}, poisonSource: {}
+    eliminationOrder: []
   };
 }
 
@@ -96,17 +82,6 @@ function doEliminate(state, targetTag, attackerTag, addLog) {
   const taken = tp.hand.splice(0, take);
   if (attackerTag && attackerTag !== targetTag) state.players[attackerTag].hand.push(...taken);
   addLog(`💀 ${targetTag} 파산!${attackerTag && attackerTag !== targetTag ? ` ${attackerTag}이(가) 영지 ${taken.length}곳 병합` : ''}`);
-
-  if (tp.hasRevenge && attackerTag && attackerTag !== targetTag && state.players[attackerTag].alive) {
-    const ap = state.players[attackerTag];
-    ap.score += 5;
-    addLog(`⚔ ${targetTag}의 피의 맹세 발동! ${attackerTag} 혼란도 +5 (현재 혼란도 ${ap.score})`);
-    if (ap.score >= ELIM_SCORE) {
-      ap.alive = false;
-      state.eliminationOrder.push(attackerTag);
-      addLog(`💀 ${attackerTag}도 피의 맹세 반동으로 연쇄 파산!`);
-    }
-  }
 }
 
 // actions: { tag: {type, cardId} } - cardId를 실제 카드 객체로 해석해서 처리
@@ -138,10 +113,8 @@ function resolveTurn(state, rawActions) {
       const p = state.players[t];
       const xt = prevAliveTag(state, prevAliveTag(state, t));
       state.players[xt].hand.push({ ...act.card, viaTrade: true });
-      let heal = 1, note = '';
-      if (p.dealFreeUses > 0) { p.dealFreeUses -= 1; heal = 2; note = ' (이중 밀약으로 회복 2)'; }
-      p.score = Math.max(0, p.score - heal);
-      addLog(`🤝 ${t}: ${xt}에 밀약 — 침공 병력(${act.card.value}) 지원, 혼란도 ${heal} 진정${note} (현재 혼란도 ${p.score})`);
+      p.score = Math.max(0, p.score - 1);
+      addLog(`🤝 ${t}: ${xt}에 밀약 — 침공 병력(${act.card.value}) 지원, 혼란도 1 진정 (현재 혼란도 ${p.score})`);
     }
   }
 
@@ -158,15 +131,9 @@ function resolveTurn(state, rawActions) {
     } else {
       const tAct = actions[tt];
       if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 방벽으로 절반 감소 (${dmg})`; }
-      if (target.hasWall && dmg > 0) { dmg = Math.max(0, dmg - 1); note += ` → 선조의 갑주로 1 추가 감소 (${dmg})`; }
     }
     target.score += dmg;
     addLog(`🔴 ${t}: 침공(${act.card.value}) → ${tt}${note} (현재 혼란도 ${target.score})`);
-    if (state.players[t].hasVenom && dmg > 0) {
-      state.poison[tt] = 3;
-      state.poisonSource[tt] = t;
-      addLog(`🐍 ${tt}에게 독배의 인장 효과 부착 (3턴)`);
-    }
     if (target.score >= ELIM_SCORE) eliminations.push({ attacker: t, target: tt });
   }
 
@@ -189,22 +156,7 @@ function resolveTurn(state, rawActions) {
     doEliminate(state, target, attacker, addLog);
   }
 
-  // 6) 독배의 인장 지속 피해
-  state.seatOrder.forEach(t => {
-    if (!state.players[t].alive || !state.poison[t]) return;
-    const p = state.players[t];
-    p.score += 1;
-    state.poison[t] -= 1;
-    addLog(`🐍 ${t}: 독배의 인장 피해 1 (현재 혼란도 ${p.score})`);
-    if (state.poison[t] <= 0) delete state.poison[t];
-    if (p.score >= ELIM_SCORE && p.alive) {
-      const srcTag = state.poisonSource[t];
-      const src = (srcTag && state.players[srcTag] && state.players[srcTag].alive) ? srcTag : t;
-      doEliminate(state, t, src, addLog);
-    }
-  });
-
-  // 7) 보충
+  // 6) 보충
   state.seatOrder.forEach(t => {
     if (!state.players[t].alive) return;
     const c = state.deck.pop();
@@ -212,7 +164,7 @@ function resolveTurn(state, rawActions) {
   });
   if (state.deck.length === 0) addLog('유물함이 모두 소진되었습니다.');
 
-  // 8) 종료 판정
+  // 7) 라운드 종료 판정
   const stillAlive = state.seatOrder.filter(t => state.players[t].alive);
   let over = false, winners = [];
   if (stillAlive.length <= 1) { over = true; winners = stillAlive; }
@@ -224,15 +176,13 @@ function resolveTurn(state, rawActions) {
   if (over) {
     state.phase = 'over';
     state.winnerTags = winners;
-    addLog(`🏆 ${winners.join(', ')} 교역계 제패!`);
+    addLog(`🏆 ${winners.join(', ')} 이번 라운드 1위!`);
   } else {
     state.turn += 1;
     state.turnStartedAt = Date.now();
   }
   return state;
 }
-
-// ===== 전초전(사전 미니게임) 전용 로직 =====
 
 function computeStandings(state) {
   const survivors = state.seatOrder.filter(t => state.players[t].alive)
@@ -241,45 +191,53 @@ function computeStandings(state) {
   return [...survivors, ...eliminatedBestFirst];
 }
 
+// standings 순서대로 등수별 코인을 지급하고 결과 메시지를 반환한다
 function awardCoins(meta, standings) {
   standings.forEach((tag, rank) => {
     const coin = COIN_TABLE[rank] ?? 0;
     meta[tag].coins += coin;
-    if (rank < 2) meta[tag].top2Count += 1;
   });
-  return `이번 전초전 결과: ${standings.map((t, i) => `${i + 1}위 ${t}(+${COIN_TABLE[i] ?? 0}금화)`).join(', ')}`;
+  return `이번 라운드 결과: ${standings.map((t, i) => `${i + 1}위 ${t}(+${COIN_TABLE[i] ?? 0}코인)`).join(', ')}`;
 }
 
-function pickRandomRune() {
-  return RUNES[Math.floor(Math.random() * RUNES.length)];
+// 보유한 영토 수익 합만큼 코인을 지급한다
+function awardLandIncome(meta) {
+  Object.keys(meta).forEach(tag => {
+    const income = meta[tag].lands.reduce((a, b) => a + b, 0);
+    meta[tag].coins += income;
+  });
 }
 
-function resolveAuction(meta, rune, bids) {
+function pickRandomLandYield() {
+  return LAND_YIELD_MIN + Math.floor(Math.random() * (LAND_YIELD_MAX - LAND_YIELD_MIN + 1));
+}
+
+// bids: { tag: amount } - 올페이 방식 비공개 입찰 처리
+function resolveLandAuction(meta, yieldValue, bids) {
   let winner = null, highest = 0;
   Object.keys(meta).forEach(tag => {
-    const b = bids[tag] || 0;
+    let b = Number(bids[tag]) || 0;
+    if (b === 1) b = 0; // 1코인 단독 입찰은 무효
+    if (b < 0) b = 0;
+    if (b > meta[tag].coins) b = meta[tag].coins;
     if (b > 0) meta[tag].coins -= b;
     if (b > highest) { highest = b; winner = tag; }
   });
-  if (!winner) return { msg: '이번 유물은 아무도 낙찰받지 못했습니다.', winner: null };
-  meta[winner].runes.push(rune.id);
-  let msg = `${winner}이(가) ${rune.icon} ${rune.name}을(를) ${highest}금화에 낙찰!`;
-  const cnt = meta[winner].runes.filter(r => r === rune.id).length;
-  let synergized = false;
-  if (cnt >= 2 && !meta[winner].passive) {
-    meta[winner].passive = rune.id;
-    msg += ` 시너지 완성 — ${rune.name} 각성!`;
-    synergized = true;
-  }
-  return { msg, winner, synergized };
+  if (!winner) return { msg: '이번 영토는 아무도 낙찰받지 못했습니다.', winner: null, yieldValue };
+  meta[winner].lands.push(yieldValue);
+  return { msg: `${winner}이(가) 영토(수익 ${yieldValue}코인/라운드)를 ${highest}코인에 낙찰!`, winner, yieldValue };
 }
 
-function checkPregameExit(meta) {
-  return Object.keys(meta).find(tag => meta[tag].top2Count >= EXIT_TOP2_TARGET || meta[tag].runes.length >= EXIT_RUNE_TARGET);
+// 목표 코인에 도달한 상단 태그를 반환한다 (없으면 null, 동시 달성 시 코인이 가장 많은 쪽)
+function checkGoalReached(meta, goal = GOAL_COINS) {
+  const reached = Object.keys(meta).filter(tag => meta[tag].coins >= goal);
+  if (reached.length === 0) return null;
+  return reached.reduce((best, t) => (meta[t].coins > meta[best].coins ? t : best), reached[0]);
 }
 
 module.exports = {
-  ELIM_SCORE, RUNES, EXIT_TOP2_TARGET, EXIT_RUNE_TARGET, COIN_TABLE,
+  ELIM_SCORE, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX,
   buildDeck, createGameState, resolveTurn, defaultAction, nextAliveTag, prevAliveTag,
-  freshMeta, computeStandings, awardCoins, pickRandomRune, resolveAuction, checkPregameExit
+  freshMeta, computeStandings, awardCoins, awardLandIncome, pickRandomLandYield,
+  resolveLandAuction, checkGoalReached
 };
