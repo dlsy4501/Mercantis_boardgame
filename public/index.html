@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>체인 오브 스론 — 실시간 멀티플레이</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Noto+Serif+KR:wght@500;700;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
+  :root{
+    --ink:#120e0a; --panel:#1c150e; --panel-2:#251b12;
+    --cream:#e9dcc0; --cream-dim:#ab9b78;
+    --attack:#7a1f2b; --attack-dim:#4a1420;
+    --coop:#5b4a8a; --coop-dim:#392c5c;
+    --gold:#b8912f; --line:#3c2f1f;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--ink); color:var(--cream); font-family:'IBM Plex Sans KR', sans-serif;
+    min-height:100vh; display:flex; justify-content:center; padding:14px; }
+  #app{ width:100%; max-width:460px; }
+  h1{ font-family:'Noto Serif KR', serif; font-weight:900; font-size:24px; margin:4px 0 2px; }
+  .sub{ color:var(--cream-dim); font-size:13px; margin-bottom:14px; line-height:1.5; }
+  .card-box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label.field-label{ font-size:12.5px; color:var(--cream-dim); display:block; margin-bottom:4px; }
+  input.text-input{ width:100%; padding:11px 12px; margin-bottom:12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--cream); font-size:15px; font-family:'IBM Plex Sans KR', sans-serif; }
+  .primary-btn{ width:100%; padding:13px 0; border:none; border-radius:10px; background:var(--attack);
+    color:#f5e9e2; font-size:15px; font-weight:700; margin-top:4px; }
+  .primary-btn:disabled{ opacity:0.35; }
+  .ghost-btn{ width:100%; padding:11px 0; border-radius:10px; border:1px solid var(--line);
+    background:transparent; color:var(--cream-dim); font-size:13.5px; margin-top:8px; }
+  .player-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 4px;
+    border-bottom:1px solid var(--line); font-size:14px; }
+  .player-row .tag-host{ color:var(--gold); font-size:11px; margin-left:6px; }
+  .player-row.status-dead{ opacity:0.35; }
+  .code-display{ text-align:center; font-family:'Cinzel',serif; font-size:30px; font-weight:800;
+    letter-spacing:6px; color:var(--gold); margin:6px 0 12px; }
+  #log{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    font-size:12.5px; color:var(--cream-dim); max-height:120px; overflow-y:auto; margin-bottom:12px; line-height:1.6; }
+  .legend{ text-align:center; font-size:12px; color:var(--cream-dim); margin-bottom:6px; }
+  .legend b.a{ color:var(--attack); } .legend b.c{ color:var(--coop); }
+  #hand{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px; }
+  .card{ flex:0 0 auto; width:58px; height:80px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--panel-2); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:'Noto Serif KR', serif; cursor:pointer; }
+  .card.attack{ border-color:var(--attack-dim); }
+  .card.attack .num{ font-size:24px; font-weight:900; color:var(--attack); font-family:'Cinzel',serif; }
+  .card.defense{ border-color:#7a6a3a; }
+  .card.shield{ border-color:var(--coop-dim); }
+  .card .label{ font-size:9.5px; margin-top:3px; color:var(--cream-dim); }
+  .card.disabled{ opacity:0.35; pointer-events:none; }
+  #status-line{ text-align:center; font-size:13px; color:var(--gold); min-height:18px; margin-bottom:8px; }
+  #modal-overlay{ position:fixed; inset:0; background:rgba(10,7,5,0.75); display:none;
+    align-items:center; justify-content:center; padding:20px; z-index:50; }
+  #modal-overlay.show{ display:flex; }
+  #modal{ background:var(--panel); border:1px solid var(--gold); border-radius:14px; padding:20px; max-width:340px; width:100%; }
+  #modal h3{ font-family:'Noto Serif KR', serif; margin:0 0 8px; font-size:17px; }
+  #modal p{ font-size:13px; color:var(--cream-dim); margin:0 0 16px; line-height:1.5; }
+  #modal .row{ display:flex; gap:8px; }
+  #modal button{ flex:1; padding:11px 0; border-radius:8px; border:none; font-size:13px; font-weight:700; }
+  #modal .yes{ background:var(--coop); color:#f1ecff; }
+  #modal .no{ background:var(--panel-2); color:var(--cream); border:1px solid var(--line); }
+  .conn-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+  .conn-ok{ background:#5b8a4c; } .conn-bad{ background:var(--attack); }
+  .rune-display{ text-align:center; font-size:44px; margin:8px 0 4px; }
+  .rune-name{ text-align:center; font-family:'Noto Serif KR',serif; font-weight:800; font-size:16px; margin-bottom:10px; }
+  .bid-row{ display:flex; align-items:center; justify-content:center; gap:14px; margin:14px 0; }
+  .bid-btn{ width:40px; height:40px; border-radius:50%; border:1px solid var(--gold); background:var(--panel-2); color:var(--gold); font-size:20px; font-weight:700; }
+  .bid-value{ font-family:'Cinzel',serif; font-size:26px; font-weight:800; min-width:50px; text-align:center; }
+  .pregame-banner{ text-align:center; font-size:11.5px; color:var(--gold); border:1px dashed var(--gold);
+    border-radius:8px; padding:4px 8px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-overlay"><div id="modal"></div></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+const socket = io();
+let myTag = '', roomCode = '', isHost = false;
+let phase = 'landing'; // landing | lobby | mini | auction | game | over
+let lastLobby = null, lastState = null;
+let pregameMeta = null, pregameRune = null, lastAuctionMsg = '', lastRoundMsg = '';
+let submittedThisTurn = -1;
+let myBid = 0;
+let bidSubmitted = false;
+let errorMsg = '';
+let connected = false;
+
+socket.on('connect', ()=>{ connected = true; render(); });
+socket.on('disconnect', ()=>{ connected = false; render(); });
+socket.on('lobby-update', (lobby)=>{
+  lastLobby = lobby;
+  if(lobby.status==='waiting') phase='lobby';
+  render();
+});
+socket.on('pregame-auction', ({rune, meta})=>{
+  pregameRune = rune; pregameMeta = meta; myBid = 0; bidSubmitted = false;
+  phase = 'auction';
+  render();
+});
+socket.on('pregame-auction-result', ({msg, meta})=>{
+  lastAuctionMsg = msg; pregameMeta = meta;
+  render();
+});
+socket.on('pregame-round-result', ({msg, meta})=>{
+  lastRoundMsg = msg; pregameMeta = meta;
+  render();
+});
+socket.on('pregame-state-update', ({state, meta})=>{
+  lastState = state; pregameMeta = meta;
+  phase = 'mini';
+  render();
+});
+socket.on('pregame-summary', ({meta})=>{
+  pregameMeta = meta;
+  phase = 'summary';
+  render();
+});
+socket.on('state-update', (state)=>{
+  lastState = state;
+  phase = state.phase==='over' ? 'over' : 'game';
+  render();
+});
+socket.on('submission-update', ()=>{ render(); });
+socket.on('bid-submission-update', ()=>{ render(); });
+
+function cardLabel(c){
+  if(c.type==='attack') return {label:'침공/밀약', extra:c.value};
+  if(c.type==='defense') return {label:'방벽', extra:'½'};
+  if(c.type==='shield') return {label:'근위대', extra:'🛡'};
+}
+function nextAliveTag(state, tag){
+  const order = state.seatOrder; let i = order.indexOf(tag);
+  for(let s=0;s<order.length;s++){ i=(i+1)%order.length; if(state.players[order[i]].alive) return order[i]; }
+  return tag;
+}
+function prevAliveTag(state, tag){
+  const order = state.seatOrder; let i = order.indexOf(tag);
+  for(let s=0;s<order.length;s++){ i=(i-1+order.length)%order.length; if(state.players[order[i]].alive) return order[i]; }
+  return tag;
+}
+function myPlayer(){ return lastState ? lastState.players[myTag] : null; }
+
+function createRoom(){
+  const tag = document.getElementById('tag-input').value.trim();
+  if(!tag){ errorMsg='상단 이름을 입력하세요.'; render(); return; }
+  socket.emit('create-room', {tag}, (res)=>{
+    if(!res.ok){ errorMsg=res.error; render(); return; }
+    myTag = tag; roomCode = res.code; isHost = true; phase='lobby'; errorMsg='';
+    render();
+  });
+}
+function joinRoom(){
+  const tag = document.getElementById('tag-input').value.trim();
+  const code = document.getElementById('code-input').value.trim().toUpperCase();
+  if(!tag || !code){ errorMsg='상단 이름과 방 코드를 모두 입력하세요.'; render(); return; }
+  socket.emit('join-room', {tag, code}, (res)=>{
+    if(!res.ok){ errorMsg=res.error; render(); return; }
+    myTag = tag; roomCode = res.code; isHost = false; phase='lobby'; errorMsg='';
+    render();
+  });
+}
+function hostStartGame(){
+  socket.emit('start-game', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
+}
+function hostStartPregame(){
+  socket.emit('start-pregame', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
+}
+function adjustBid(delta){
+  let v = myBid + delta;
+  if(v<0) v=0;
+  const cap = (pregameMeta && pregameMeta[myTag]) ? pregameMeta[myTag].coins : 0;
+  if(v>cap) v=cap;
+  myBid = v;
+  render();
+}
+function submitBid(){
+  if(myBid===1) return;
+  socket.emit('submit-bid', {amount: myBid});
+  bidSubmitted = true;
+  render();
+}
+function toggleSelect(cardId){
+  const p = myPlayer(); if(!p) return;
+  const card = p.hand.find(c=>c.id===cardId); if(!card) return;
+  if(card.type==='attack'){
+    const xt = prevAliveTag(lastState, prevAliveTag(lastState, myTag));
+    const lt = nextAliveTag(lastState, myTag);
+    showModal({
+      title:'이 병력을 어떻게 쓸까요?',
+      body:`침공(${card.value})으로 ${lt}의 영지에 피해를 줄까요, 아니면 밀약으로 ${xt}에 병력을 지원하고 혼란도를 진정시킬까요?`,
+      yesLabel:`침공 (피해 ${card.value})`, noLabel:`밀약 (${xt}에 지원)`,
+      onYes: ()=>submitAction('attack', cardId),
+      onNo: ()=>submitAction('trade', cardId)
+    });
+    return;
+  }
+  if(card.type==='defense'){ submitAction('defend', cardId); return; }
+  if(card.type==='shield'){ submitAction('shield', cardId); return; }
+}
+function submitAction(type, cardId){
+  socket.emit('submit-action', {type, cardId});
+  submittedThisTurn = lastState.turn;
+  render();
+}
+function showModal({title, body, yesLabel, noLabel, onYes, onNo}){
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `<h3>${title}</h3><p>${body}</p>
+    <div class="row"><button class="no" id="modal-no">${noLabel}</button><button class="yes" id="modal-yes">${yesLabel}</button></div>`;
+  overlay.classList.add('show');
+  document.getElementById('modal-yes').onclick = ()=>{ overlay.classList.remove('show'); onYes(); };
+  document.getElementById('modal-no').onclick = ()=>{ overlay.classList.remove('show'); onNo(); };
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if(phase==='landing') app.innerHTML = landingHTML();
+  else if(phase==='lobby') app.innerHTML = lobbyHTML();
+  else if(phase==='auction') app.innerHTML = auctionHTML();
+  else if(phase==='mini') app.innerHTML = gameHTML(true);
+  else if(phase==='summary') app.innerHTML = summaryHTML();
+  else if(phase==='game') app.innerHTML = gameHTML(false);
+  else if(phase==='over') app.innerHTML = overHTML();
+  attachHandlers();
+}
+function connDot(){
+  return `<span class="conn-dot ${connected?'conn-ok':'conn-bad'}"></span><span class="sub" style="display:inline;">${connected?'서버 연결됨':'서버 연결 끊김'}</span>`;
+}
+function landingHTML(){
+  return `
+    <h1>체인 오브 스론</h1>
+    <div class="sub">${connDot()}</div>
+    <div class="sub">회원가입 없이, 상단 이름(태그)과 방 코드만으로 참가합니다.</div>
+    <div class="card-box">
+      <label class="field-label">우리 상단 이름</label>
+      <input class="text-input" id="tag-input" placeholder="예: 발더 상단" maxlength="12">
+      <button class="primary-btn" id="create-btn">새 상단 연합 열기 (방 만들기)</button>
+    </div>
+    <div class="card-box">
+      <label class="field-label">참가할 방 코드</label>
+      <input class="text-input" id="code-input" placeholder="예: A3F9" maxlength="4" style="text-transform:uppercase;">
+      <button class="primary-btn" id="join-btn">상단 연합 참가하기</button>
+    </div>
+    ${errorMsg?`<div class="sub" style="color:var(--attack);text-align:center;">${errorMsg}</div>`:''}
+  `;
+}
+function lobbyHTML(){
+  const lobby = lastLobby || {players:[], hostTag:''};
+  const rows = lobby.players.map(t=>`<div class="player-row"><span>${t}${t===lobby.hostTag?'<span class="tag-host">호스트</span>':''}</span><span>${t===myTag?'(나)':''}</span></div>`).join('');
+  const canStart = isHost && lobby.players.length>=3 && lobby.players.length<=6;
+  return `
+    <h1>상단 연합 대기실</h1>
+    <div class="sub">${connDot()}</div>
+    <div class="sub">이 방 코드를 다른 상단에게 공유하세요.</div>
+    <div class="code-display">${roomCode}</div>
+    <div class="card-box">${rows}<div class="sub" style="margin-top:8px;">${lobby.players.length}/6개 상단 참가 중 (최소 3개 상단 필요)</div></div>
+    ${isHost ? `
+      <button class="primary-btn" id="start-pregame-btn" ${canStart?'':'disabled'}>암중 전초전부터 시작</button>
+      <button class="ghost-btn" id="start-game-btn" ${canStart?'':'disabled'}>전초전 건너뛰고 바로 전면전</button>
+      <div class="sub" style="text-align:center;">${canStart?'':'최소 3개 상단이 모여야 시작할 수 있습니다.'}</div>`
+      : `<div class="sub" style="text-align:center;">호스트(${lobby.hostTag})가 전쟁을 시작하기를 기다리는 중...</div>`}
+    ${errorMsg?`<div class="sub" style="color:var(--attack);text-align:center;">${errorMsg}</div>`:''}
+  `;
+}
+function auctionHTML(){
+  const meta = pregameMeta || {};
+  const myCoins = meta[myTag] ? meta[myTag].coins : 0;
+  const isInvalid = myBid===1;
+  const rows = Object.keys(meta).map(t=>`
+    <div class="player-row"><span>${t} ${meta[t].passive?'(각성 완료)':''}</span><span>${meta[t].coins}금화 · 유물 ${meta[t].runes.length}개</span></div>
+  `).join('');
+  return `
+    <h1>🏺 고대 유물 경매</h1>
+    <div class="sub">${connDot()}</div>
+    ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
+    ${lastAuctionMsg?`<div class="sub" style="text-align:center;">${lastAuctionMsg}</div>`:''}
+    <div class="card-box">
+      <div class="rune-display">${pregameRune?pregameRune.icon:''}</div>
+      <div class="rune-name">${pregameRune?pregameRune.name:''}</div>
+      <div class="sub" style="text-align:center;font-size:12px;">${pregameRune?pregameRune.desc:''}</div>
+      <div class="sub" style="text-align:center;font-size:12px;">같은 유물 2개를 모으면 상단의 비의가 각성합니다.</div>
+      <div class="bid-row">
+        <button class="bid-btn" id="bid-minus">−</button>
+        <div class="bid-value">${myBid}</div>
+        <button class="bid-btn" id="bid-plus">+</button>
+      </div>
+      <div class="sub" style="text-align:center;font-size:11.5px;">우리 상단 금고: ${myCoins}닢 · 최소 입찰 2금화 (0=포기) · 낙찰 실패해도 회수 불가</div>
+      ${isInvalid?`<div class="sub" style="text-align:center;color:var(--attack);">1금화로는 로비할 수 없습니다.</div>`:''}
+      <button class="primary-btn" id="submit-bid-btn" ${isInvalid || bidSubmitted?'disabled':''}>${bidSubmitted?'제출 완료 — 대기 중':'입찰 확정'}</button>
+    </div>
+    <div class="card-box">${rows}</div>
+  `;
+}
+function summaryHTML(){
+  const meta = pregameMeta || {};
+  const rows = Object.keys(meta).map(t=>`
+    <div class="player-row"><span>${t}</span><span>${meta[t].passive?meta[t].passive:'비의 없음'} · 금화 ${meta[t].coins} · 1·2위 ${meta[t].top2Count}회</span></div>
+  `).join('');
+  return `
+    <h1>🎲 전초전 종결</h1>
+    <div class="sub">${connDot()}</div>
+    <div class="card-box">
+      <div class="sub">조건을 달성한 상단이 나와 전초전이 종결되었습니다. 곧 전면전이 시작됩니다...</div>
+      <div>${rows}</div>
+    </div>
+  `;
+}
+function gameHTML(isPregame){
+  const state = lastState;
+  const me = myPlayer();
+  const rows = state.seatOrder.map(t=>{
+    const p = state.players[t];
+    const isLeft = nextAliveTag(state, myTag)===t && p.alive;
+    const isRight = prevAliveTag(state, myTag)===t && p.alive;
+    const cls = !p.alive ? 'status-dead' : '';
+    const mark = isLeft ? ' <b class="a">◀침공대상</b>' : (isRight ? ' <b class="c">▶회유대상</b>' : '');
+    return `<div class="player-row ${cls}"><span>${t}${t===myTag?' (나)':''}${mark}</span><span>혼란도 ${p.score} · 병력 ${p.alive?p.hand.length:'💀'}${p.shield>0?' 🛡':''}</span></div>`;
+  }).join('');
+  let handHTML = '';
+  if(me && me.alive){
+    me.hand.forEach(c=>{
+      const info = cardLabel(c);
+      handHTML += `<div class="card ${c.type}" data-card-id="${c.id}">
+        <div class="num">${info.extra}</div><div class="label">${info.label}</div></div>`;
+    });
+  }
+  const alreadySubmitted = submittedThisTurn === state.turn;
+  let statusText;
+  if(!me || !me.alive) statusText = '우리 상단은 파산했습니다. 남은 정세를 지켜보세요.';
+  else if(me.hand.length===0) statusText = '낼 카드가 없습니다 — 국고 탕진 상태 (자동 관망 처리됩니다)';
+  else if(alreadySubmitted) statusText = '제출 완료. 다른 상단의 결정을 기다리는 중...';
+  else statusText = '이번 턴에 낼 병력 카드를 고르세요.';
+  return `
+    <h1>체인 오브 스론</h1>
+    ${isPregame?`<div class="pregame-banner">🎲 암중 전초전 진행 중</div>`:''}
+    <div class="legend">턴 ${state.turn} · 유물함 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
+    <div class="card-box">${rows}</div>
+    <div id="status-line">${statusText}</div>
+    <div id="log">${state.log.slice(-30).map(m=>`<div>${m}</div>`).join('')}</div>
+    <div id="hand">${handHTML || '<div class="sub">해당 없음</div>'}</div>
+  `;
+}
+function overHTML(){
+  const state = lastState;
+  const table = state.seatOrder.map(t=>{
+    const p = state.players[t];
+    return `<div class="player-row"><span>${t}${p.alive?'':' 💀'}</span><span>혼란도 ${p.score}</span></div>`;
+  }).join('');
+  return `
+    <h1>체인 오브 스론</h1>
+    <div class="card-box">
+      <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${state.winnerTags.join(', ')}, 교역의 패자가 되다!</h3>
+      <div>${table}</div>
+    </div>
+    <button class="primary-btn" id="reload-btn">새 상단 연합 열기</button>
+  `;
+}
+function attachHandlers(){
+  const c1=document.getElementById('create-btn'); if(c1) c1.onclick=createRoom;
+  const c2=document.getElementById('join-btn'); if(c2) c2.onclick=joinRoom;
+  const c3=document.getElementById('start-game-btn'); if(c3) c3.onclick=hostStartGame;
+  const c3b=document.getElementById('start-pregame-btn'); if(c3b) c3b.onclick=hostStartPregame;
+  const c4=document.getElementById('reload-btn'); if(c4) c4.onclick=()=>location.reload();
+  const bm=document.getElementById('bid-minus'); if(bm) bm.onclick=()=>adjustBid(-1);
+  const bp=document.getElementById('bid-plus'); if(bp) bp.onclick=()=>adjustBid(1);
+  const sb=document.getElementById('submit-bid-btn'); if(sb) sb.onclick=submitBid;
+  document.querySelectorAll('.card[data-card-id]').forEach(el=>{
+    const alreadySubmitted = lastState && submittedThisTurn===lastState.turn;
+    if(alreadySubmitted){ el.classList.add('disabled'); return; }
+    el.onclick = ()=>toggleSelect(Number(el.dataset.cardId));
+  });
+}
+render();
+</script>
+</body>
+</html>
