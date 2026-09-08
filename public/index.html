@@ -127,9 +127,10 @@
 const GOAL_COINS = 20;
 const socket = io();
 let myTag = '', roomCode = '', isHost = false;
-let phase = 'landing'; // landing | lobby | game | auction | over
+let phase = 'landing'; // landing | lobby | game | auction | auction-result | over
 let lastLobby = null, lastState = null, gameMeta = null;
-let auctionYield = null, lastAuctionMsg = '', lastRoundMsg = '';
+let auctionYield = null, lastRoundMsg = '';
+let auctionResultBids = null, auctionResultWinner = null, auctionResultYield = null;
 let gameOverWinner = null;
 let submittedThisTurn = -1;
 let myBid = 0;
@@ -166,8 +167,10 @@ socket.on('land-auction', ({yieldValue, meta})=>{
   render();
 });
 socket.on('bid-submission-update', ()=>{ render(); });
-socket.on('land-auction-result', ({msg, meta})=>{
-  lastAuctionMsg = msg; gameMeta = meta;
+socket.on('land-auction-result', ({meta, bids, winner, yieldValue})=>{
+  gameMeta = meta;
+  auctionResultBids = bids || {}; auctionResultWinner = winner; auctionResultYield = yieldValue;
+  phase = 'auction-result';
   render();
 });
 socket.on('game-over', ({winnerTag, meta})=>{
@@ -249,9 +252,9 @@ function setAnimStatus(text){
 }
 function playEvent(circle, ev){
   if(ev.type === 'guard'){
-    flyToken(circle, seatCenterPx(circle, ev.from), seatCenterPx(circle, ev.to), '🟢');
-    flashSeat(circle, ev.to, 'seat-fx-guard');
-    setAnimStatus(`🟢 ${ev.from} → ${ev.to}: 근위대 배치`);
+    floatText(circle, seatCenterPx(circle, ev.tag), '🛡', 'blocked');
+    flashSeat(circle, ev.tag, 'seat-fx-guard');
+    setAnimStatus(`🟢 ${ev.tag}: 근위대로 자기 방어`);
   } else if(ev.type === 'trade'){
     flyToken(circle, seatCenterPx(circle, ev.from), seatCenterPx(circle, ev.to), `<div class="fly-card">${ev.value}</div>`);
     flashSeat(circle, ev.from, 'seat-fx-trade');
@@ -392,7 +395,7 @@ function showRulesModal(){
         <tr><th>종류</th><th>장수</th><th>효과</th></tr>
         <tr><td>침공/밀약</td><td>60장</td><td>침공: 왼쪽에 피해. 밀약: 전전 상단에 카드 전달, 혼란도 1 회복</td></tr>
         <tr><td>방벽</td><td>18장</td><td>이번 턴 받을 피해 절반 감소</td></tr>
-        <tr><td>근위대</td><td>18장</td><td>오른쪽 상단에게 부여, 이번 턴 침공 1회 완전 무효</td></tr>
+        <tr><td>근위대</td><td>18장</td><td>자신에게 적용, 이번 턴 자신이 받는 침공 1회 완전 무효</td></tr>
       </table>
 
       <h4>파산과 라운드 종료</h4>
@@ -425,6 +428,7 @@ function render(){
   if(phase==='landing') app.innerHTML = landingHTML();
   else if(phase==='lobby') app.innerHTML = lobbyHTML();
   else if(phase==='auction') app.innerHTML = auctionHTML();
+  else if(phase==='auction-result') app.innerHTML = auctionResultHTML();
   else if(phase==='game') app.innerHTML = gameHTML();
   else if(phase==='over') app.innerHTML = overHTML();
   attachHandlers();
@@ -487,7 +491,6 @@ function auctionHTML(){
     <h1>🏞 영토 경매</h1>
     <div class="sub">${connDot()}</div>
     ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
-    ${lastAuctionMsg?`<div class="sub" style="text-align:center;">${lastAuctionMsg}</div>`:''}
     <div class="card-box">
       <div class="land-display">🏞</div>
       <div class="land-name">새 영토 — 예상 수익 +${auctionYield}코인/라운드</div>
@@ -504,17 +507,39 @@ function auctionHTML(){
     <div class="card-box">${rows}</div>
   `;
 }
+function auctionResultHTML(){
+  const meta = gameMeta || {};
+  const bids = auctionResultBids || {};
+  const rows = Object.keys(meta).map(t=>{
+    const bid = bids[t];
+    const isWinner = t === auctionResultWinner;
+    const bidText = bid === undefined ? '입찰 없음(시간초과)' : (bid > 0 ? `${bid}코인 입찰` : '포기 (0코인)');
+    return `<div class="player-row"><span>${t}${isWinner?' 🏆':''}</span><span>${bidText}</span></div>`;
+  }).join('');
+  return `
+    <h1>🏞 경매 결과</h1>
+    <div class="sub">${connDot()}</div>
+    <div class="card-box">
+      <div class="land-display">🏞</div>
+      <div class="land-name">${auctionResultWinner ? `${auctionResultWinner} 낙찰!` : '아무도 낙찰받지 못함'}</div>
+      ${auctionResultWinner ? `<div class="sub" style="text-align:center;">이 영토의 수익은 +${auctionResultYield}코인/라운드입니다.</div>` : ''}
+    </div>
+    <div class="card-box">${rows}</div>
+    <div class="sub" style="text-align:center;">잠시 후 다음 체인게임 라운드가 시작됩니다...</div>
+  `;
+}
 function gameHTML(){
   const state = lastState;
   const me = myPlayer();
   const n = state.seatOrder.length;
   const myIndex = Math.max(0, state.seatOrder.indexOf(myTag));
   const radiusPct = 35;
-  // 게임설명서 좌석 규칙: 왼쪽=내가 침공하는 대상, 오른쪽=나를 침공하는 상단(근위대 대상),
+  // 게임설명서 좌석 규칙: 왼쪽=내가 침공하는 대상, 오른쪽=나를 침공하는 상단,
   // 전전 상단(오른쪽의 오른쪽)=밀약 대상. 3인전에서는 침공대상과 밀약대상이 같아질 수 있다.
+  // 근위대는 오른쪽에게 주는 카드가 아니라 자기 자신을 방어하는 카드이므로 별도 "근위대 대상" 표시는 없다.
   const attackTag = nextAliveTag(state, myTag);
-  const guardTag = prevAliveTag(state, myTag);
-  const tradeTag = prevAliveTag(state, guardTag);
+  const rightTag = prevAliveTag(state, myTag);
+  const tradeTag = prevAliveTag(state, rightTag);
   lastSeatPositions = {};
   const seatsHTML = state.seatOrder.map((t, i)=>{
     const p = state.players[t];
@@ -531,7 +556,7 @@ function gameHTML(){
     if(!p.alive) cls.push('seat-dead');
     const marks = [];
     if(!isMe && attackTag === t && p.alive) marks.push('<span class="seat-mark a">◀침공대상</span>');
-    if(!isMe && guardTag === t && p.alive) marks.push('<span class="seat-mark g">🛡근위대대상</span>');
+    if(!isMe && rightTag === t && p.alive) marks.push('<span class="seat-mark g">⚠나를 침공</span>');
     if(!isMe && tradeTag === t && p.alive) marks.push('<span class="seat-mark c">🤝밀약대상</span>');
     return `<div class="${cls.join(' ')}" data-tag="${t}" style="left:${x}%;top:${y}%;">
       <div class="seat-name">${t}${isMe?' (나)':''}</div>

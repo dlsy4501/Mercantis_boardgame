@@ -103,14 +103,13 @@ function resolveTurn(state, rawActions) {
 
   order.forEach(t => { state.players[t].shield = 0; });
 
-  // 1) 근위대 / 밀약
+  // 1) 근위대(자기방어) / 밀약
   for (const t of order) {
     const act = actions[t];
     if (act.type === 'shield') {
-      const tt = prevAliveTag(state, t);
-      state.players[tt].shield = 1;
-      addLog(`🟢 ${t}: 근위대 배치 → ${tt}`);
-      events.push({ type: 'guard', from: t, to: tt });
+      state.players[t].shield = 1;
+      addLog(`🟢 ${t}: 근위대로 자기 방어`);
+      events.push({ type: 'guard', tag: t });
     } else if (act.type === 'trade') {
       const p = state.players[t];
       const xt = prevAliveTag(state, prevAliveTag(state, t));

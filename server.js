@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 const TURN_TIMEOUT_MS = 25000;
 const BID_TIMEOUT_MS = 20000;
 const BOT_AUTO_BID = 2; // 봇이 경매에서 자동으로 제시하는 고정 입찰액
+const AUCTION_RESULT_DISPLAY_MS = 4000; // 경매 결과를 보여주고 다음 라운드로 넘어가기까지 대기 시간
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -179,12 +180,19 @@ function tryResolveBids(code, forceTimeout) {
 
   const result = resolveLandAuction(room.meta, auction.yieldValue, auction.bids);
   room.auction = null;
-  io.to(code).emit('land-auction-result', { msg: result.msg, meta: room.meta });
+  io.to(code).emit('land-auction-result', {
+    msg: result.msg, meta: room.meta,
+    bids: auction.bids, winner: result.winner, yieldValue: auction.yieldValue
+  });
 
-  // 다음 체인게임 라운드 시작
-  room.state = createGameState(room.players.slice());
-  room.pendingActions = {};
-  startTurn(code);
+  // 경매 결과를 잠시 보여준 뒤 다음 체인게임 라운드 시작
+  setTimeout(() => {
+    const r = rooms[code];
+    if (!r || r.status !== 'playing') return;
+    r.state = createGameState(r.players.slice());
+    r.pendingActions = {};
+    startTurn(code);
+  }, AUCTION_RESULT_DISPLAY_MS);
 }
 
 /* ================= 소켓 이벤트 ================= */

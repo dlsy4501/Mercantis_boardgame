@@ -44,11 +44,12 @@ README.md                     실행/배포 안내
 
 ## 2. 체인게임 규칙 (`game-logic.js`)
 
-- 좌석/방향: 왼쪽=내가 침공하는 대상, 오른쪽=나를 침공하는 상단(근위대 배치 대상), 전전 상단=밀약 대상. `nextAliveTag`/`prevAliveTag`로 계산.
+- 좌석/방향: 왼쪽=내가 침공하는 대상, 오른쪽=나를 침공하는 상단, 전전 상단=밀약 대상. `nextAliveTag`/`prevAliveTag`로 계산.
 - 시작 손패: 3~4개 상단 7장, 5~6개 상단 5장.
 - 덱 96장: 침공/밀약(1~5, 18/15/12/9/6) 60장, 방벽(`type: 'defense'`) 18장, 근위대(`type: 'shield'`) 18장.
-- 매 턴 카드가 있으면 반드시 제출(패스 불가), 전원 동시 처리. 처리 순서: 근위대 배치/밀약 → 침공(근위대 완전 방어 → 방벽 절반 감소) → 사용 카드 제거 → 파산 확정 → 카드 보충.
-- `resolveTurn`은 사람이 읽는 `state.log` 문자열과 별도로, 클라이언트 애니메이션용 구조화 이벤트를 `state.events`(해당 턴에서만 유효, 매 턴 초기화)에 담아 반환한다: `{type:'guard',from,to}` / `{type:'trade',from,to,value}` / `{type:'attack',from,to,cardValue,damage,blockedBy}`(`blockedBy`: `'guard'`|`'defend'`|`null`) / `{type:'defend',tag}` / `{type:'none',tag}` / `{type:'eliminate',target,attacker,taken}` / `{type:'draw',tag}`. 순서는 로그와 동일(근위대/밀약 → 침공 → 방벽/탕진 → 파산 → 보충). 새 이벤트 종류를 추가할 때는 로그 텍스트와 이벤트 둘 다 갱신할 것.
+- **근위대는 자기방어(셀프실드) 카드다.** 오른쪽 상단에게 부여하던 이전 설계에서 변경됨 — `resolveTurn`에서 `shield` 액션은 `state.players[t].shield = 1`로 **자기 자신**에게 적용되고, 침공 판정에서 `target.shield > 0`(공격받는 쪽의 실드)을 그대로 검사하므로 별도 대상 계산이 필요 없다. 이번 턴에만 유효, 다음 턴으로 이월 안 됨.
+- 매 턴 카드가 있으면 반드시 제출(패스 불가), 전원 동시 처리. 처리 순서: 근위대(자기방어)/밀약 → 침공(근위대 완전 방어 → 방벽 절반 감소) → 사용 카드 제거 → 파산 확정 → 카드 보충.
+- `resolveTurn`은 사람이 읽는 `state.log` 문자열과 별도로, 클라이언트 애니메이션용 구조화 이벤트를 `state.events`(해당 턴에서만 유효, 매 턴 초기화)에 담아 반환한다: `{type:'guard',tag}`(자기방어) / `{type:'trade',from,to,value}` / `{type:'attack',from,to,cardValue,damage,blockedBy}`(`blockedBy`: `'guard'`|`'defend'`|`null`) / `{type:'defend',tag}` / `{type:'none',tag}` / `{type:'eliminate',target,attacker,taken}` / `{type:'draw',tag}`. 순서는 로그와 동일(근위대/밀약 → 침공 → 방벽/탕진 → 파산 → 보충). 새 이벤트 종류를 추가할 때는 로그 텍스트와 이벤트 둘 다 갱신할 것.
 - 밀약: 혼란도 항상 고정 1 회복 (배율 없음).
 - 파산: 혼란도 24 이상, 파산시킨 쪽이 남은 손패 절반(올림) 병합.
 - 라운드 종료: 1개 상단만 생존, 또는 덱+전원 손패 모두 소진(이때는 혼란도 최소자가 1위). `computeStandings`가 최종 등수를 계산.
@@ -74,8 +75,10 @@ README.md                     실행/배포 안내
 | `submit-action` / `submission-update` | 양방향 | 카드 제출 및 제출 현황 알림 |
 | `round-result` | server→client | 라운드 종료 시 등수별 코인 + 영토 소득 지급 결과 메시지 |
 | `land-auction` / `submit-bid` / `bid-submission-update` | 양방향 | 영토 경매 진행 |
-| `land-auction-result` | server→client | 낙찰 결과 |
+| `land-auction-result` | server→client | 낙찰 결과: `bids`(상단별 입찰액 전체 공개), `winner`, `yieldValue` 포함. 클라이언트는 이걸로 전용 결과 화면(`auction-result`)을 띄운다 |
 | `game-over` | server→client | 목표 코인 20 달성 상단(`winnerTag`)과 최종 `meta` |
+
+- 경매가 끝나면 즉시 다음 라운드로 넘어가지 않고, `AUCTION_RESULT_DISPLAY_MS`(기본 4000ms) 동안 결과 화면을 보여준 뒤 서버가 다음 체인게임 라운드를 시작한다 (`tryResolveBids` 내부 `setTimeout`).
 
 턴 제한 25초(`TURN_TIMEOUT_MS`), 입찰 제한 20초(`BID_TIMEOUT_MS`) — 시간 초과 시 서버가 기본 행동(가장 약한 침공 카드, 없으면 방벽/근위대 · 입찰 0)으로 자동 처리.
 
