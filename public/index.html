@@ -186,9 +186,9 @@ socket.on('game-over', ({winnerTag, meta})=>{
 });
 
 function cardLabel(c){
-  if(c.type==='attack') return {label:'침공/밀약', extra:c.value};
-  if(c.type==='defense') return {label:'방벽', extra:'½'};
-  if(c.type==='shield') return {label:'근위대', extra:'🛡'};
+  if(c.type==='attack') return {label:'부채 전가/밀약', extra:c.value};
+  if(c.type==='defense') return {label:'보험', extra:'½'};
+  if(c.type==='shield') return {label:'면책', extra:'🛡'};
 }
 function nextAliveTag(state, tag){
   const order = state.seatOrder; let i = order.indexOf(tag);
@@ -260,27 +260,27 @@ function playEvent(circle, ev){
   if(ev.type === 'guard'){
     floatText(circle, seatCenterPx(circle, ev.tag), '🛡', 'blocked');
     flashSeat(circle, ev.tag, 'seat-fx-guard');
-    setAnimStatus(`🟢 ${ev.tag}: 근위대로 자기 방어`);
+    setAnimStatus(`🟢 ${ev.tag}: 면책으로 자기 방어`);
   } else if(ev.type === 'trade'){
     flyToken(circle, seatCenterPx(circle, ev.from), seatCenterPx(circle, ev.to), `<div class="fly-card">${ev.value}</div>`);
     flashSeat(circle, ev.from, 'seat-fx-trade');
     flashSeat(circle, ev.to, 'seat-fx-trade');
-    setAnimStatus(`🤝 ${ev.from} → ${ev.to}: 밀약 (병력 ${ev.value} 지원)`);
+    setAnimStatus(`🤝 ${ev.from} → ${ev.to}: 밀약 (카드 ${ev.value} 지원)`);
   } else if(ev.type === 'attack'){
     flashSeat(circle, ev.from, 'seat-fx-attack-from');
     flashSeat(circle, ev.to, ev.damage > 0 ? 'seat-fx-attack-hit' : 'seat-fx-attack-blocked');
     const label = ev.damage > 0 ? `-${ev.damage}` : (ev.blockedBy === 'guard' ? '🛡무효' : '½감소');
     floatText(circle, seatCenterPx(circle, ev.to), label, ev.damage > 0 ? 'dmg' : 'blocked');
-    setAnimStatus(`🔴 ${ev.from} → ${ev.to}: 침공(${ev.cardValue})${ev.damage > 0 ? ` · 피해 ${ev.damage}` : ' · 무효화'}`);
+    setAnimStatus(`🔴 ${ev.from} → ${ev.to}: 부채 전가(${ev.cardValue})${ev.damage > 0 ? ` · 부채 ${ev.damage}` : ' · 무효화'}`);
   } else if(ev.type === 'defend'){
     flashSeat(circle, ev.tag, 'seat-fx-defend');
-    setAnimStatus(`🛡 ${ev.tag}: 방벽 구축`);
+    setAnimStatus(`🛡 ${ev.tag}: 보험 가입`);
   } else if(ev.type === 'none'){
     flashSeat(circle, ev.tag, 'seat-fx-none');
     setAnimStatus(`⚠ ${ev.tag}: 국고 탕진`);
   } else if(ev.type === 'eliminate'){
     flashSeat(circle, ev.target, 'seat-fx-eliminate');
-    setAnimStatus(`💀 ${ev.target} 파산!${ev.attacker ? ` (${ev.attacker}이(가) 영지 ${ev.taken}곳 병합)` : ''}`);
+    setAnimStatus(`💀 ${ev.target} 파산!${ev.attacker ? ` (${ev.attacker}이(가) 채권 ${ev.taken}건 회수)` : ''}`);
   } else if(ev.type === 'draw'){
     flyToken(circle, circleCenterPx(circle), seatCenterPx(circle, ev.tag), '<div class="fly-card back"></div>');
   }
@@ -349,9 +349,9 @@ function toggleSelect(cardId){
     const xt = prevAliveTag(lastState, prevAliveTag(lastState, myTag));
     const lt = nextAliveTag(lastState, myTag);
     showModal({
-      title:'이 병력을 어떻게 쓸까요?',
-      body:`침공(${card.value})으로 ${lt}의 영지에 피해를 줄까요, 아니면 밀약으로 ${xt}에 병력을 지원하고 혼란도를 진정시킬까요?`,
-      yesLabel:`침공 (피해 ${card.value})`, noLabel:`밀약 (${xt}에 지원)`,
+      title:'이 카드를 어떻게 쓸까요?',
+      body:`부채 전가(${card.value})로 ${lt}에게 부채를 넘길까요, 아니면 밀약으로 ${xt}에 카드를 지원하고 내 부채를 진정시킬까요?`,
+      yesLabel:`부채 전가 (${card.value})`, noLabel:`밀약 (${xt}에 지원)`,
       onYes: ()=>submitAction('attack', cardId),
       onNo: ()=>submitAction('trade', cardId)
     });
@@ -387,25 +387,25 @@ function showRulesModal(){
       <p><b style="color:var(--gold);">코인 20을 먼저 모으는 상단이 승리</b>합니다. 별도의 최종 결전 없이, 아래 루프를 반복하다 목표에 도달하는 순간 게임이 끝납니다.</p>
 
       <h4>전체 흐름</h4>
-      <p>체인게임 한 라운드 진행 → 등수별 코인 지급 → 보유 영토 소득 지급 → 목표 도달 확인 → (미도달 시) 영토 경매 1회 → 다시 체인게임... 반복</p>
+      <p>체인게임 한 라운드 진행 → 등수별 코인 지급 → 보유 상관 소득 지급 → 목표 도달 확인 → (미도달 시) 상관 경매 1회 → 다시 체인게임... 반복</p>
 
       <h4>체인게임 기본 규칙</h4>
       <ul>
-        <li>3~6개 상단이 원형으로 앉으며 방향은 고정: <b class="a">왼쪽</b>은 내가 침공하는 대상, <b class="c">오른쪽</b>은 나를 침공하는 상단, <b>전전 상단</b>(오른쪽의 오른쪽)은 밀약 대상입니다.</li>
+        <li>3~6개 상단이 원형으로 앉으며 방향은 고정: <b class="a">왼쪽</b>은 내가 부채를 전가하는 대상, <b class="c">오른쪽</b>은 나에게 부채를 전가하는 상단, <b>전전 상단</b>(오른쪽의 오른쪽)은 밀약 대상입니다.</li>
         <li>매 턴 손패에 카드가 있으면 반드시 한 장을 내야 합니다 (패스 불가). 전원 동시 공개.</li>
-        <li>방벽·근위대는 공격당한 뒤가 아니라 이번 턴에 미리 내야 적용됩니다. 근위대는 그 턴에만 유효합니다.</li>
+        <li>보험·면책은 공격당한 뒤가 아니라 이번 턴에 미리 내야 적용됩니다. 면책은 그 턴에만 유효합니다.</li>
       </ul>
 
       <h4>카드 (총 96장)</h4>
       <table>
         <tr><th>종류</th><th>장수</th><th>효과</th></tr>
-        <tr><td>침공/밀약</td><td>60장</td><td>침공: 왼쪽에 피해. 밀약: 전전 상단에 카드 전달, 혼란도 1 회복</td></tr>
-        <tr><td>방벽</td><td>18장</td><td>이번 턴 받을 피해 절반 감소</td></tr>
-        <tr><td>근위대</td><td>18장</td><td>자신에게 적용, 이번 턴 자신이 받는 침공 1회 완전 무효</td></tr>
+        <tr><td>부채 전가/밀약</td><td>60장</td><td>부채 전가: 왼쪽 상단에게 부채 전가. 밀약: 전전 상단에 카드 전달, 부채 1 회복</td></tr>
+        <tr><td>보험</td><td>18장</td><td>이번 턴 받을 부채 절반 감소</td></tr>
+        <tr><td>면책</td><td>18장</td><td>자신에게 적용, 이번 턴 자신이 받는 부채 전가 1회 완전 무효</td></tr>
       </table>
 
       <h4>파산과 라운드 종료</h4>
-      <p>혼란도가 24 이상이면 즉시 파산합니다. 파산시킨 상단이 남은 손패 절반(올림)을 병합합니다. 1개 상단만 남거나, 유물함(덱)과 전원의 손패가 모두 소진되면 그 라운드가 끝납니다 (후자의 경우 혼란도가 가장 낮은 쪽이 그 라운드 1위).</p>
+      <p>부채가 24 이상이면 즉시 파산합니다. 파산시킨 상단이 남은 손패 절반(올림)을 채권으로 회수합니다. 1개 상단만 남거나, 덱과 전원의 손패가 모두 소진되면 그 라운드가 끝납니다 (후자의 경우 부채가 가장 낮은 쪽이 그 라운드 1위).</p>
 
       <h4>등수별 코인</h4>
       <table>
@@ -415,10 +415,10 @@ function showRulesModal(){
         <tr><td>4~6등</td><td>0코인</td></tr>
       </table>
 
-      <h4>영토와 경매</h4>
+      <h4>상관과 경매</h4>
       <ul>
         <li>모든 상단은 <b>3코인</b>으로 시작합니다.</li>
-        <li>영토를 보유하면 매 라운드 등수 코인과 별도로 <b>고정 수익(1~3코인)</b>을 받습니다. 수익은 낙찰 시 무작위로 정해지고 이후 계속 동일합니다.</li>
+        <li>상관을 보유하면 매 라운드 등수 코인과 별도로 <b>고정 수익(1~3코인)</b>을 받습니다. 수익은 낙찰 시 무작위로 정해지고 이후 계속 동일합니다.</li>
         <li>경매는 1코인 단위로 자유 입찰하되 <b>1코인 단독 입찰은 불가</b>(0=포기, 2 이상만 유효)합니다.</li>
         <li><b style="color:var(--attack);">입찰액은 낙찰에 실패해도 돌려받지 못합니다</b> (올페이 방식).</li>
       </ul>
@@ -491,16 +491,16 @@ function auctionHTML(){
   const myCoins = meta[myTag] ? meta[myTag].coins : 0;
   const isInvalid = myBid===1;
   const rows = Object.keys(meta).map(t=>`
-    <div class="player-row"><span>${t}</span><span>${meta[t].coins}코인 · 영토 ${meta[t].lands.length}개</span></div>
+    <div class="player-row"><span>${t}</span><span>${meta[t].coins}코인 · 상관 ${meta[t].lands.length}개</span></div>
   `).join('');
   return `
-    <h1>🏞 영토 경매</h1>
+    <h1>🏞 상관 경매</h1>
     <div class="sub">${connDot()}</div>
     ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
     <div class="card-box">
       <div class="land-display">🏞</div>
-      <div class="land-name">새 영토 — 예상 수익 +${auctionYield}코인/라운드</div>
-      <div class="sub" style="text-align:center;font-size:12px;">낙찰받으면 이 영토를 보유하는 한 매 라운드 ${auctionYield}코인이 들어옵니다.</div>
+      <div class="land-name">새 상관 — 예상 수익 +${auctionYield}코인/라운드</div>
+      <div class="sub" style="text-align:center;font-size:12px;">낙찰받으면 이 상관을 보유하는 한 매 라운드 ${auctionYield}코인이 들어옵니다.</div>
       <div class="bid-row">
         <button class="bid-btn" id="bid-minus">−</button>
         <div class="bid-value">${myBid}</div>
@@ -528,7 +528,7 @@ function auctionResultHTML(){
     <div class="card-box">
       <div class="land-display">🏞</div>
       <div class="land-name">${auctionResultWinner ? `${auctionResultWinner} 낙찰!` : '아무도 낙찰받지 못함'}</div>
-      ${auctionResultWinner ? `<div class="sub" style="text-align:center;">이 영토의 수익은 +${auctionResultYield}코인/라운드입니다.</div>` : ''}
+      ${auctionResultWinner ? `<div class="sub" style="text-align:center;">이 상관의 수익은 +${auctionResultYield}코인/라운드입니다.</div>` : ''}
     </div>
     <div class="card-box">${rows}</div>
     <div class="sub" style="text-align:center;">잠시 후 다음 체인게임 라운드가 시작됩니다...</div>
@@ -540,9 +540,9 @@ function gameHTML(){
   const n = state.seatOrder.length;
   const myIndex = Math.max(0, state.seatOrder.indexOf(myTag));
   const radiusPct = 35;
-  // 게임설명서 좌석 규칙: 왼쪽=내가 침공하는 대상, 오른쪽=나를 침공하는 상단,
-  // 전전 상단(오른쪽의 오른쪽)=밀약 대상. 3인전에서는 침공대상과 밀약대상이 같아질 수 있다.
-  // 근위대는 오른쪽에게 주는 카드가 아니라 자기 자신을 방어하는 카드이므로 별도 "근위대 대상" 표시는 없다.
+  // 게임설명서 좌석 규칙: 왼쪽=내가 부채를 전가하는 대상, 오른쪽=나에게 부채를 전가하는 상단,
+  // 전전 상단(오른쪽의 오른쪽)=밀약 대상. 3인전에서는 전가대상과 밀약대상이 같아질 수 있다.
+  // 면책은 오른쪽에게 주는 카드가 아니라 자기 자신을 방어하는 카드이므로 별도 "면책 대상" 표시는 없다.
   const attackTag = nextAliveTag(state, myTag);
   const rightTag = prevAliveTag(state, myTag);
   const tradeTag = prevAliveTag(state, rightTag);
@@ -561,12 +561,12 @@ function gameHTML(){
     if(isMe) cls.push('seat-me');
     if(!p.alive) cls.push('seat-dead');
     const marks = [];
-    if(!isMe && attackTag === t && p.alive) marks.push('<span class="seat-mark a">◀침공대상</span>');
-    if(!isMe && rightTag === t && p.alive) marks.push('<span class="seat-mark g">⚠나를 침공</span>');
+    if(!isMe && attackTag === t && p.alive) marks.push('<span class="seat-mark a">◀전가대상</span>');
+    if(!isMe && rightTag === t && p.alive) marks.push('<span class="seat-mark g">⚠나에게 전가</span>');
     if(!isMe && tradeTag === t && p.alive) marks.push('<span class="seat-mark c">🤝밀약대상</span>');
     return `<div class="${cls.join(' ')}" data-tag="${t}" style="left:${x}%;top:${y}%;">
       <div class="seat-name">${t}${isMe?' (나)':''}</div>
-      <div class="seat-info">혼란도 ${p.score} · ${p.alive?p.hand.length+'장':'💀'}${p.shield>0?' 🛡':''}</div>
+      <div class="seat-info">부채 ${p.score} · ${p.alive?p.hand.length+'장':'💀'}${p.shield>0?' 🛡':''}</div>
       ${marks.join('')}
     </div>`;
   }).join('');
@@ -593,7 +593,7 @@ function gameHTML(){
   }).join('');
   return `
     <h1>메르칸티스</h1>
-    <div class="legend">턴 ${state.turn} · 유물함 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
+    <div class="legend">턴 ${state.turn} · 덱 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
     ${coinStrip?`<div class="coin-strip">${coinStrip}</div>`:''}
     <div class="seat-circle">
       <div class="seat-circle-center">
@@ -611,7 +611,7 @@ function gameHTML(){
 function overHTML(){
   const meta = gameMeta || {};
   const table = Object.keys(meta).map(t=>{
-    return `<div class="player-row"><span>${t}${t===gameOverWinner?' 🏆':''}</span><span>${meta[t].coins}코인 · 영토 ${meta[t].lands.length}개</span></div>`;
+    return `<div class="player-row"><span>${t}${t===gameOverWinner?' 🏆':''}</span><span>${meta[t].coins}코인 · 상관 ${meta[t].lands.length}개</span></div>`;
   }).join('');
   return `
     <h1>메르칸티스</h1>

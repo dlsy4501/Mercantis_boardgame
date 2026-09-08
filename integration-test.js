@@ -28,7 +28,7 @@ function defaultActionFor(hand) {
   console.log('=== 4개 클라이언트 연결 & 방 구성 ===');
   const sockets = await Promise.all(NAMES.map(() => connect()));
   const states = {};   // tag -> 최신 체인게임 라운드 상태
-  const metas = {};    // tag -> 최신 코인/영토 메타
+  const metas = {};    // tag -> 최신 코인/상관 메타
   const phases = {};   // tag -> 클라이언트가 인식하는 단계 ('game' | 'auction' | 'over')
   const auctions = {}; // tag -> 최신 경매 정보
   let gameOverInfo = null;
@@ -54,7 +54,7 @@ function defaultActionFor(hand) {
   }
   await new Promise(r => setTimeout(r, 300));
 
-  console.log('=== 게임 시작 (체인게임 + 영토 경제 단일 루프) ===');
+  console.log('=== 게임 시작 (체인게임 + 상관 경제 단일 루프) ===');
   const startRes = await emitAsync(sockets[0], 'start-game', {});
   console.log('start-game 결과:', startRes);
   await new Promise(r => setTimeout(r, 300));

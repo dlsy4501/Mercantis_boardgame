@@ -58,7 +58,7 @@ function createGameState(seatOrder) {
   });
   return {
     seatOrder, players, deck, turn: 1, turnStartedAt: Date.now(),
-    log: [`${n}개 상단의 전쟁 개시. 매 턴 전원이 병력 카드를 동시에 공개합니다.`],
+    log: [`${n}개 상단의 거래 개시. 매 턴 전원이 카드를 동시에 공개합니다.`],
     phase: 'playing', winnerTags: [],
     eliminationOrder: [], events: []
   };
@@ -81,7 +81,7 @@ function doEliminate(state, targetTag, attackerTag, addLog) {
   const take = Math.ceil(tp.hand.length / 2);
   const taken = tp.hand.splice(0, take);
   if (attackerTag && attackerTag !== targetTag) state.players[attackerTag].hand.push(...taken);
-  addLog(`💀 ${targetTag} 파산!${attackerTag && attackerTag !== targetTag ? ` ${attackerTag}이(가) 영지 ${taken.length}곳 병합` : ''}`);
+  addLog(`💀 ${targetTag} 파산!${attackerTag && attackerTag !== targetTag ? ` ${attackerTag}이(가) 채권 ${taken.length}건 회수` : ''}`);
 }
 
 // actions: { tag: {type, cardId} } - cardId를 실제 카드 객체로 해석해서 처리
@@ -103,24 +103,24 @@ function resolveTurn(state, rawActions) {
 
   order.forEach(t => { state.players[t].shield = 0; });
 
-  // 1) 근위대(자기방어) / 밀약
+  // 1) 면책(자기방어) / 밀약
   for (const t of order) {
     const act = actions[t];
     if (act.type === 'shield') {
       state.players[t].shield = 1;
-      addLog(`🟢 ${t}: 근위대로 자기 방어`);
+      addLog(`🟢 ${t}: 면책으로 자기 방어`);
       events.push({ type: 'guard', tag: t });
     } else if (act.type === 'trade') {
       const p = state.players[t];
       const xt = prevAliveTag(state, prevAliveTag(state, t));
       state.players[xt].hand.push({ ...act.card, viaTrade: true });
       p.score = Math.max(0, p.score - 1);
-      addLog(`🤝 ${t}: ${xt}에 밀약 — 침공 병력(${act.card.value}) 지원, 혼란도 1 진정 (현재 혼란도 ${p.score})`);
+      addLog(`🤝 ${t}: ${xt}에 밀약 — 부채 전가 카드(${act.card.value}) 지원, 부채 1 진정 (현재 부채 ${p.score})`);
       events.push({ type: 'trade', from: t, to: xt, value: act.card.value });
     }
   }
 
-  // 2) 침공
+  // 2) 부채 전가
   const eliminations = [];
   for (const t of order) {
     const act = actions[t];
@@ -129,13 +129,13 @@ function resolveTurn(state, rawActions) {
     const target = state.players[tt];
     let dmg = act.card.value, note = '', blockedBy = null;
     if (target.shield > 0) {
-      target.shield -= 1; dmg = 0; note = ' → 근위대가 완전 방어!'; blockedBy = 'guard';
+      target.shield -= 1; dmg = 0; note = ' → 면책으로 완전 방어!'; blockedBy = 'guard';
     } else {
       const tAct = actions[tt];
-      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 방벽으로 절반 감소 (${dmg})`; blockedBy = 'defend'; }
+      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 보험으로 절반 감소 (${dmg})`; blockedBy = 'defend'; }
     }
     target.score += dmg;
-    addLog(`🔴 ${t}: 침공(${act.card.value}) → ${tt}${note} (현재 혼란도 ${target.score})`);
+    addLog(`🔴 ${t}: 부채 전가(${act.card.value}) → ${tt}${note} (현재 부채 ${target.score})`);
     events.push({ type: 'attack', from: t, to: tt, cardValue: act.card.value, damage: dmg, blockedBy });
     if (target.score >= ELIM_SCORE) eliminations.push({ attacker: t, target: tt });
   }
@@ -149,7 +149,7 @@ function resolveTurn(state, rawActions) {
   // 4) 로그
   order.forEach(t => {
     const act = actions[t];
-    if (act.type === 'defend') { addLog(`🛡 ${t}: 방벽 구축`); events.push({ type: 'defend', tag: t }); }
+    if (act.type === 'defend') { addLog(`🛡 ${t}: 보험 가입`); events.push({ type: 'defend', tag: t }); }
     if (act.type === 'none') { addLog(`⚠ ${t}: 국고 탕진 (낼 카드 없음)`); events.push({ type: 'none', tag: t }); }
   });
 
@@ -167,7 +167,7 @@ function resolveTurn(state, rawActions) {
     const c = state.deck.pop();
     if (c) { state.players[t].hand.push(c); events.push({ type: 'draw', tag: t }); }
   });
-  if (state.deck.length === 0) addLog('유물함이 모두 소진되었습니다.');
+  if (state.deck.length === 0) addLog('덱이 모두 소진되었습니다.');
 
   state.events = events;
 
@@ -207,7 +207,7 @@ function awardCoins(meta, standings) {
   return `이번 라운드 결과: ${standings.map((t, i) => `${i + 1}위 ${t}(+${COIN_TABLE[i] ?? 0}코인)`).join(', ')}`;
 }
 
-// 보유한 영토 수익 합만큼 코인을 지급한다
+// 보유한 상관 수익 합만큼 코인을 지급한다
 function awardLandIncome(meta) {
   Object.keys(meta).forEach(tag => {
     const income = meta[tag].lands.reduce((a, b) => a + b, 0);
@@ -230,9 +230,9 @@ function resolveLandAuction(meta, yieldValue, bids) {
     if (b > 0) meta[tag].coins -= b;
     if (b > highest) { highest = b; winner = tag; }
   });
-  if (!winner) return { msg: '이번 영토는 아무도 낙찰받지 못했습니다.', winner: null, yieldValue };
+  if (!winner) return { msg: '이번 상관은 아무도 낙찰받지 못했습니다.', winner: null, yieldValue };
   meta[winner].lands.push(yieldValue);
-  return { msg: `${winner}이(가) 영토(수익 ${yieldValue}코인/라운드)를 ${highest}코인에 낙찰!`, winner, yieldValue };
+  return { msg: `${winner}이(가) 상관(수익 ${yieldValue}코인/라운드)을 ${highest}코인에 낙찰!`, winner, yieldValue };
 }
 
 // 목표 코인에 도달한 상단 태그를 반환한다 (없으면 null, 동시 달성 시 코인이 가장 많은 쪽)

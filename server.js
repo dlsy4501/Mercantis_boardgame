@@ -22,7 +22,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // rooms[code] = {
 //   hostTag, players: [tag,...], bots: Set<tag>, status: 'waiting'|'playing'|'over',
-//   meta: { tag: {coins, lands} },   // 게임 시작부터 끝까지 유지되는 코인/영토 정보
+//   meta: { tag: {coins, lands} },   // 게임 시작부터 끝까지 유지되는 코인/상관 정보
 //   state: <체인게임 현재 라운드 상태 or null>, pendingActions: {},
 //   auction: { yieldValue, bids, bidStartedAt } | null
 // }
@@ -59,8 +59,8 @@ function broadcastAuction(code) {
   });
 }
 
-// 봇은 사람의 제출을 기다리지 않도록, 턴이 시작되자마자 기본 행동(가장 약한 침공 카드,
-// 없으면 방벽/근위대)을 즉시 제출해둔다.
+// 봇은 사람의 제출을 기다리지 않도록, 턴이 시작되자마자 기본 행동(가장 약한 부채 전가 카드,
+// 없으면 보험/면책)을 즉시 제출해둔다.
 function autoSubmitBotActions(code) {
   const room = rooms[code];
   if (!room || !room.state) return;
@@ -278,7 +278,7 @@ io.on('connection', (socket) => {
     startTurn(code);
   });
 
-  // 영토 경매 입찰
+  // 상관 경매 입찰
   socket.on('submit-bid', ({ amount }) => {
     const code = socket.data.code, tag = socket.data.tag;
     const room = rooms[code];
