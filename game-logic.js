@@ -60,7 +60,7 @@ function createGameState(seatOrder) {
     seatOrder, players, deck, turn: 1, turnStartedAt: Date.now(),
     log: [`${n}개 상단의 전쟁 개시. 매 턴 전원이 병력 카드를 동시에 공개합니다.`],
     phase: 'playing', winnerTags: [],
-    eliminationOrder: []
+    eliminationOrder: [], events: []
   };
 }
 
@@ -98,6 +98,7 @@ function resolveTurn(state, rawActions) {
 
   const order = state.seatOrder.filter(t => state.players[t].alive && actions[t]);
   const addLog = (m) => state.log.push(m);
+  const events = [];
   addLog(`── 턴 ${state.turn} 결과 ──`);
 
   order.forEach(t => { state.players[t].shield = 0; });
@@ -109,12 +110,14 @@ function resolveTurn(state, rawActions) {
       const tt = prevAliveTag(state, t);
       state.players[tt].shield = 1;
       addLog(`🟢 ${t}: 근위대 배치 → ${tt}`);
+      events.push({ type: 'guard', from: t, to: tt });
     } else if (act.type === 'trade') {
       const p = state.players[t];
       const xt = prevAliveTag(state, prevAliveTag(state, t));
       state.players[xt].hand.push({ ...act.card, viaTrade: true });
       p.score = Math.max(0, p.score - 1);
       addLog(`🤝 ${t}: ${xt}에 밀약 — 침공 병력(${act.card.value}) 지원, 혼란도 1 진정 (현재 혼란도 ${p.score})`);
+      events.push({ type: 'trade', from: t, to: xt, value: act.card.value });
     }
   }
 
@@ -125,15 +128,16 @@ function resolveTurn(state, rawActions) {
     if (act.type !== 'attack') continue;
     const tt = nextAliveTag(state, t);
     const target = state.players[tt];
-    let dmg = act.card.value, note = '';
+    let dmg = act.card.value, note = '', blockedBy = null;
     if (target.shield > 0) {
-      target.shield -= 1; dmg = 0; note = ' → 근위대가 완전 방어!';
+      target.shield -= 1; dmg = 0; note = ' → 근위대가 완전 방어!'; blockedBy = 'guard';
     } else {
       const tAct = actions[tt];
-      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 방벽으로 절반 감소 (${dmg})`; }
+      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 방벽으로 절반 감소 (${dmg})`; blockedBy = 'defend'; }
     }
     target.score += dmg;
     addLog(`🔴 ${t}: 침공(${act.card.value}) → ${tt}${note} (현재 혼란도 ${target.score})`);
+    events.push({ type: 'attack', from: t, to: tt, cardValue: act.card.value, damage: dmg, blockedBy });
     if (target.score >= ELIM_SCORE) eliminations.push({ attacker: t, target: tt });
   }
 
@@ -146,23 +150,27 @@ function resolveTurn(state, rawActions) {
   // 4) 로그
   order.forEach(t => {
     const act = actions[t];
-    if (act.type === 'defend') addLog(`🛡 ${t}: 방벽 구축`);
-    if (act.type === 'none') addLog(`⚠ ${t}: 국고 탕진 (낼 카드 없음)`);
+    if (act.type === 'defend') { addLog(`🛡 ${t}: 방벽 구축`); events.push({ type: 'defend', tag: t }); }
+    if (act.type === 'none') { addLog(`⚠ ${t}: 국고 탕진 (낼 카드 없음)`); events.push({ type: 'none', tag: t }); }
   });
 
   // 5) 파산
   for (const { attacker, target } of eliminations) {
     if (!state.players[target].alive) continue;
+    const taken = Math.ceil(state.players[target].hand.length / 2);
     doEliminate(state, target, attacker, addLog);
+    events.push({ type: 'eliminate', target, attacker: attacker !== target ? attacker : null, taken });
   }
 
   // 6) 보충
   state.seatOrder.forEach(t => {
     if (!state.players[t].alive) return;
     const c = state.deck.pop();
-    if (c) state.players[t].hand.push(c);
+    if (c) { state.players[t].hand.push(c); events.push({ type: 'draw', tag: t }); }
   });
   if (state.deck.length === 0) addLog('유물함이 모두 소진되었습니다.');
+
+  state.events = events;
 
   // 7) 라운드 종료 판정
   const stillAlive = state.seatOrder.filter(t => state.players[t].alive);

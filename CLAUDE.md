@@ -48,6 +48,7 @@ README.md                     실행/배포 안내
 - 시작 손패: 3~4개 상단 7장, 5~6개 상단 5장.
 - 덱 96장: 침공/밀약(1~5, 18/15/12/9/6) 60장, 방벽(`type: 'defense'`) 18장, 근위대(`type: 'shield'`) 18장.
 - 매 턴 카드가 있으면 반드시 제출(패스 불가), 전원 동시 처리. 처리 순서: 근위대 배치/밀약 → 침공(근위대 완전 방어 → 방벽 절반 감소) → 사용 카드 제거 → 파산 확정 → 카드 보충.
+- `resolveTurn`은 사람이 읽는 `state.log` 문자열과 별도로, 클라이언트 애니메이션용 구조화 이벤트를 `state.events`(해당 턴에서만 유효, 매 턴 초기화)에 담아 반환한다: `{type:'guard',from,to}` / `{type:'trade',from,to,value}` / `{type:'attack',from,to,cardValue,damage,blockedBy}`(`blockedBy`: `'guard'`|`'defend'`|`null`) / `{type:'defend',tag}` / `{type:'none',tag}` / `{type:'eliminate',target,attacker,taken}` / `{type:'draw',tag}`. 순서는 로그와 동일(근위대/밀약 → 침공 → 방벽/탕진 → 파산 → 보충). 새 이벤트 종류를 추가할 때는 로그 텍스트와 이벤트 둘 다 갱신할 것.
 - 밀약: 혼란도 항상 고정 1 회복 (배율 없음).
 - 파산: 혼란도 24 이상, 파산시킨 쪽이 남은 손패 절반(올림) 병합.
 - 라운드 종료: 1개 상단만 생존, 또는 덱+전원 손패 모두 소진(이때는 혼란도 최소자가 1위). `computeStandings`가 최종 등수를 계산.
