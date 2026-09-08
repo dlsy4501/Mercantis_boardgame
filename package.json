@@ -1,7 +1,7 @@
 {
-  "name": "chain-of-thrones-server",
+  "name": "mercantis-server",
   "version": "1.0.0",
-  "description": "체인 오브 스론 멀티플레이 서버 (Express + Socket.io)",
+  "description": "메르칸티스 멀티플레이 서버 (Express + Socket.io)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

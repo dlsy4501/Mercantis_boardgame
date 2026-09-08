@@ -280,5 +280,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`체인 오브 스론 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
+  console.log(`메르칸티스 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
 });
