@@ -10,8 +10,8 @@ const {
 } = require('./game-logic');
 
 const PORT = process.env.PORT || 3000;
-const TURN_TIMEOUT_MS = 25000;
-const BID_TIMEOUT_MS = 20000;
+const TURN_TIMEOUT_MS = 15000;
+const BID_TIMEOUT_MS = 15000;
 const BOT_AUTO_BID = 2; // 봇이 경매에서 자동으로 제시하는 고정 입찰액
 const AUCTION_RESULT_DISPLAY_MS = 4000; // 경매 결과를 보여주고 다음 라운드로 넘어가기까지 대기 시간
 
@@ -55,7 +55,7 @@ function broadcastAuction(code) {
   if (!room || !room.auction) return;
   io.to(code).emit('land-auction', {
     yieldValue: room.auction.yieldValue, meta: room.meta,
-    bidTags: Object.keys(room.auction.bids)
+    bidTags: Object.keys(room.auction.bids), bidStartedAt: room.auction.bidStartedAt
   });
 }
 
@@ -132,21 +132,31 @@ function tryResolveTurn(code, forceTimeout) {
 /* ================= 라운드 종료 → 코인 지급 → 경매 or 게임 종료 ================= */
 function finishRound(code) {
   const room = rooms[code];
-  const standings = computeStandings(room.state);
+  const finishedState = room.state;
+  const standings = computeStandings(finishedState);
   const rankMsg = awardCoins(room.meta, standings);
   awardLandIncome(room.meta);
 
-  io.to(code).emit('round-result', { msg: rankMsg, meta: room.meta, state: room.state });
+  io.to(code).emit('round-result', { msg: rankMsg, meta: room.meta, state: finishedState });
 
-  const winnerTag = checkGoalReached(room.meta);
-  if (winnerTag) {
-    room.status = 'over';
-    io.to(code).emit('game-over', { winnerTag, meta: room.meta });
-    broadcastLobby(code);
-    return;
-  }
+  // 라운드를 끝낸 마지막 턴의 결과(부채 전가/파산 등)를 클라이언트가 재생할 시간을 준 뒤
+  // 다음 경매(또는 게임 종료)로 넘어간다.
+  const eventCount = finishedState.events ? finishedState.events.length : 0;
+  const delay = Math.min(8000, 1000 + eventCount * 650);
+  setTimeout(() => {
+    const r = rooms[code];
+    if (!r || r.status !== 'playing') return;
 
-  startNextAuction(code);
+    const winnerTag = checkGoalReached(r.meta);
+    if (winnerTag) {
+      r.status = 'over';
+      io.to(code).emit('game-over', { winnerTag, meta: r.meta });
+      broadcastLobby(code);
+      return;
+    }
+
+    startNextAuction(code);
+  }, delay);
 }
 
 function startNextAuction(code) {

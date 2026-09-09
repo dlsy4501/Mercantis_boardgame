@@ -112,7 +112,9 @@
   .seat.seat-fx-none{ box-shadow:0 0 0 2px var(--line); }
   .seat.seat-fx-eliminate{ opacity:0.25; }
   @keyframes seatShake{ 0%,100%{ transform:translate(-50%,-50%); } 25%{ transform:translate(calc(-50% - 3px),-50%); } 75%{ transform:translate(calc(-50% + 3px),-50%); } }
-  .fly-token{ position:absolute; transform:translate(-50%,-50%); transition:left .5s ease, top .5s ease;
+  .fly-token{ position:absolute; transform:translate(-50%,-50%) scale(0.85); opacity:0;
+    transition:left .6s cubic-bezier(.32,.72,.35,1), top .6s cubic-bezier(.32,.72,.35,1),
+      opacity .2s ease, transform .6s cubic-bezier(.32,.72,.35,1);
     pointer-events:none; z-index:30; font-size:18px; }
   .fly-token .fly-card{ width:22px; height:30px; border-radius:4px; border:1.5px solid var(--gold);
     background:var(--panel-2); display:flex; align-items:center; justify-content:center;
@@ -122,6 +124,8 @@
     pointer-events:none; z-index:31; font-weight:800; font-family:'Cinzel',serif; font-size:16px; opacity:1; }
   .float-text.dmg{ color:var(--attack); }
   .float-text.blocked{ color:var(--gold); }
+  .timer{ text-align:center; font-family:'Cinzel',serif; font-size:15px; font-weight:800; color:var(--gold); margin-bottom:6px; }
+  .timer.timer-low{ color:var(--attack); }
 </style>
 </head>
 <body>
@@ -131,6 +135,8 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 const GOAL_COINS = 20;
+const TURN_TIMEOUT_MS = 15000;
+const BID_TIMEOUT_MS = 15000;
 const socket = io();
 let myTag = '', roomCode = '', isHost = false;
 let phase = 'landing'; // landing | lobby | game | auction | auction-result | over
@@ -145,43 +151,68 @@ let errorMsg = '';
 let connected = false;
 let lastSeatPositions = {}; // 원형 좌석 렌더링 시 계산된 태그별 {x,y}(%) — 애니메이션 좌표 계산용
 let animToken = 0;
+let animating = false; // 턴 결과 애니메이션 재생 중에는 손패 클릭을 막아 이전 턴 카드가 다시 제출되는 걸 방지
+let timerDeadline = null, timerInterval = null;
 
 socket.on('connect', ()=>{ connected = true; render(); });
 socket.on('disconnect', ()=>{ connected = false; render(); });
 socket.on('lobby-update', (lobby)=>{
   lastLobby = lobby;
-  if(lobby.status==='waiting') phase='lobby';
+  if(lobby.status==='waiting'){ phase='lobby'; stopTimer(); }
   render();
 });
 socket.on('state-update', ({state, meta})=>{
   if(state.turn===1) submittedThisTurn = -1; // 새 라운드 시작 — 이전 라운드의 제출 기록 초기화
-  const wasGame = phase === 'game' && lastState;
-  const eventsToPlay = (wasGame && state.events && state.events.length) ? state.events : [];
-  lastState = state; gameMeta = meta;
+  gameMeta = meta;
+  const prevState = (phase === 'game') ? lastState : null;
+  const eventsToPlay = (prevState && state.events && state.events.length) ? state.events : [];
   phase = 'game';
-  render();
-  if(eventsToPlay.length) playTurnEvents(eventsToPlay);
+  if(eventsToPlay.length){
+    // 화면은 이전 턴 그대로 두고, 이벤트가 재생되는 순간에 맞춰서만 부채/카드 수를 갱신한다 —
+    // 공격 애니메이션이 뜨기 전에 부채 숫자가 먼저 올라가 있는 것처럼 보이지 않도록.
+    stopTimer();
+    playTurnEvents(eventsToPlay, state);
+  } else {
+    lastState = state;
+    render();
+    startTimer(state.turnStartedAt + TURN_TIMEOUT_MS);
+  }
 });
 socket.on('submission-update', ()=>{ render(); });
-socket.on('round-result', ({msg, meta})=>{
+socket.on('round-result', ({msg, meta, state})=>{
   lastRoundMsg = msg; gameMeta = meta;
-  render();
+  stopTimer();
+  const prevState = (phase === 'game') ? lastState : null;
+  const eventsToPlay = (prevState && state && state.events && state.events.length) ? state.events : [];
+  if(eventsToPlay.length){
+    // 라운드를 끝낸 마지막 턴도 다른 턴과 똑같이 순차 재생한다 (끝났다고 순간 이동하지 않도록).
+    // 다음 순서는 경매이므로 재생이 끝나도 새 턴 타이머는 시작하지 않는다.
+    playTurnEvents(eventsToPlay, state, false);
+  } else if(state){
+    lastState = state;
+    render();
+  } else {
+    render();
+  }
 });
-socket.on('land-auction', ({yieldValue, meta})=>{
+socket.on('land-auction', ({yieldValue, meta, bidStartedAt})=>{
   auctionYield = yieldValue; gameMeta = meta; myBid = 0; bidSubmitted = false;
   phase = 'auction';
   render();
+  startTimer((bidStartedAt || Date.now()) + BID_TIMEOUT_MS);
 });
 socket.on('bid-submission-update', ()=>{ render(); });
 socket.on('land-auction-result', ({meta, bids, winner, yieldValue})=>{
   gameMeta = meta;
   auctionResultBids = bids || {}; auctionResultWinner = winner; auctionResultYield = yieldValue;
   phase = 'auction-result';
+  stopTimer();
   render();
 });
 socket.on('game-over', ({winnerTag, meta})=>{
   gameOverWinner = winnerTag; gameMeta = meta;
   phase = 'over';
+  stopTimer();
   render();
 });
 
@@ -202,7 +233,29 @@ function prevAliveTag(state, tag){
 }
 function myPlayer(){ return lastState ? lastState.players[myTag] : null; }
 
-/* ================= 턴 결과 순차 재생 애니메이션 ================= */
+/* ================= 턴 타이머 ================= */
+function startTimer(deadlineTs){
+  timerDeadline = deadlineTs;
+  stopTimer();
+  timerInterval = setInterval(updateTimerDisplay, 250);
+  updateTimerDisplay();
+}
+function stopTimer(){
+  if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
+  timerDeadline = null;
+}
+function updateTimerDisplay(){
+  const el = document.getElementById('turn-timer');
+  if(!el || timerDeadline===null) return;
+  const remain = Math.max(0, Math.ceil((timerDeadline - Date.now()) / 1000));
+  el.textContent = `⏱ ${remain}초`;
+  el.classList.toggle('timer-low', remain <= 5);
+}
+
+/* ================= 턴 결과 순차 재생 애니메이션 =================
+   화면은 이전 턴 상태를 그대로 유지한 채, 이벤트가 재생되는 "그 순간"에만
+   해당 좌석의 부채/카드 수/생존 여부를 갱신한다 — 공격 애니메이션이 뜨기 전에
+   숫자가 먼저 바뀌어 있는 것처럼 보이지 않도록 하기 위함. */
 function seatCenterPx(circle, tag){
   const pos = lastSeatPositions[tag];
   if(!pos) return null;
@@ -215,6 +268,7 @@ function circleCenterPx(circle){
 }
 function flyToken(circle, from, to, innerHTML, ms){
   if(!from || !to) return;
+  const total = ms || 600;
   const el = document.createElement('div');
   el.className = 'fly-token';
   el.innerHTML = innerHTML;
@@ -225,9 +279,12 @@ function flyToken(circle, from, to, innerHTML, ms){
     requestAnimationFrame(()=>{
       el.style.left = to.x + 'px';
       el.style.top = to.y + 'px';
+      el.style.opacity = '1';
+      el.style.transform = 'translate(-50%,-50%) scale(1)';
     });
   });
-  setTimeout(()=>{ el.remove(); }, ms || 650);
+  setTimeout(()=>{ el.style.opacity = '0'; }, Math.max(0, total - 150));
+  setTimeout(()=>{ el.remove(); }, total);
 }
 function floatText(circle, pos, text, cls){
   if(!pos) return;
@@ -255,6 +312,37 @@ function flashSeat(circle, tag, cls, ms){
 function setAnimStatus(text){
   const el = document.getElementById('status-line');
   if(el) el.textContent = text;
+}
+// ev가 실제로 일어나는 시점에 맞춰 local(좌석별 임시 부채/카드수/생존) 값을 갱신
+function applyEventToLocal(local, ev){
+  if(ev.type === 'guard'){
+    local[ev.tag].shield = 1;
+  } else if(ev.type === 'trade'){
+    local[ev.from].score = Math.max(0, local[ev.from].score - 1);
+    local[ev.to].hand += 1;
+  } else if(ev.type === 'attack'){
+    local[ev.to].score += ev.damage;
+  } else if(ev.type === 'eliminate'){
+    local[ev.target].alive = false;
+    if(ev.attacker) local[ev.attacker].hand += ev.taken;
+  } else if(ev.type === 'draw'){
+    local[ev.tag].hand += 1;
+  }
+}
+function eventTags(ev){
+  if(ev.type === 'trade' || ev.type === 'attack') return [ev.from, ev.to];
+  if(ev.type === 'eliminate') return [ev.target, ev.attacker].filter(Boolean);
+  if(ev.tag) return [ev.tag];
+  return [];
+}
+function updateSeatDOM(circle, tag, local){
+  let el;
+  try{ el = circle.querySelector(`.seat[data-tag="${CSS.escape(tag)}"]`); }catch(e){ return; }
+  if(!el) return;
+  const d = local[tag];
+  const info = el.querySelector('.seat-info');
+  if(info) info.innerHTML = `부채 ${d.score} · ${d.alive ? d.hand+'장' : '💀'}${d.shield>0 ? ' 🛡' : ''}`;
+  el.classList.toggle('seat-dead', !d.alive);
 }
 function playEvent(circle, ev){
   if(ev.type === 'guard'){
@@ -285,17 +373,42 @@ function playEvent(circle, ev){
     flyToken(circle, circleCenterPx(circle), seatCenterPx(circle, ev.tag), '<div class="fly-card back"></div>');
   }
 }
-function playTurnEvents(events){
+// events: 이번에 재생할 구조화 이벤트 목록. finalState: 재생이 끝나면 화면에 반영할 최종 상태.
+// startTimerAfter: 재생이 끝난 뒤 다음 턴 제출 타이머를 시작할지 (라운드를 끝낸 마지막 턴이면 false —
+// 다음은 경매이므로 그쪽 타이머가 따로 시작된다).
+function playTurnEvents(events, finalState, startTimerAfter){
+  if(startTimerAfter === undefined) startTimerAfter = true;
   const token = ++animToken;
+  animating = true;
+  // 재생 중에는 이전 턴 손패(이미 낸 카드 포함)를 다시 클릭해 제출하지 못하도록 막아둔다.
+  document.querySelectorAll('#hand .card[data-card-id]').forEach(el=>{ el.classList.add('disabled'); el.onclick = null; });
   const circle = document.querySelector('.seat-circle');
-  if(!circle) return;
-  const finalStatusText = (document.getElementById('status-line') || {}).textContent || '';
+  if(!circle){
+    animating = false; lastState = finalState; render();
+    if(startTimerAfter) startTimer(finalState.turnStartedAt + TURN_TIMEOUT_MS);
+    return;
+  }
+  // 이전 턴(현재 화면) 기준으로 좌석별 부채/카드수/생존 임시값을 만들고, 이벤트 재생에 맞춰 갱신한다.
+  const local = {};
+  lastState.seatOrder.forEach(t=>{
+    const p = lastState.players[t];
+    local[t] = { score: p.score, hand: p.hand.length, alive: p.alive, shield: 0 }; // 매 턴 시작 시 방어막은 초기화됨
+  });
   let i = 0;
   function step(){
     if(token !== animToken) return; // 이후 턴 결과가 먼저 도착 — 이 재생은 중단
-    if(i >= events.length){ setAnimStatus(finalStatusText); return; }
-    playEvent(circle, events[i++]);
-    setTimeout(step, 600);
+    if(i >= events.length){
+      animating = false;
+      lastState = finalState;
+      render();
+      if(startTimerAfter) startTimer(finalState.turnStartedAt + TURN_TIMEOUT_MS);
+      return;
+    }
+    const ev = events[i++];
+    applyEventToLocal(local, ev);
+    eventTags(ev).forEach(t=>updateSeatDOM(circle, t, local));
+    playEvent(circle, ev);
+    setTimeout(step, 650);
   }
   step();
 }
@@ -496,6 +609,7 @@ function auctionHTML(){
   return `
     <h1>🏞 상관 경매</h1>
     <div class="sub">${connDot()}</div>
+    <div class="timer" id="turn-timer">⏱ --초</div>
     ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
     <div class="card-box">
       <div class="land-display">🏞</div>
@@ -594,6 +708,7 @@ function gameHTML(){
   return `
     <h1>메르칸티스</h1>
     <div class="legend">턴 ${state.turn} · 덱 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
+    <div class="timer" id="turn-timer">⏱ --초</div>
     ${coinStrip?`<div class="coin-strip">${coinStrip}</div>`:''}
     <div class="seat-circle">
       <div class="seat-circle-center">
@@ -637,7 +752,7 @@ function attachHandlers(){
   const sb=document.getElementById('submit-bid-btn'); if(sb) sb.onclick=submitBid;
   document.querySelectorAll('.card[data-card-id]').forEach(el=>{
     const alreadySubmitted = lastState && submittedThisTurn===lastState.turn;
-    if(alreadySubmitted){ el.classList.add('disabled'); return; }
+    if(alreadySubmitted || animating){ el.classList.add('disabled'); return; }
     el.onclick = ()=>toggleSelect(Number(el.dataset.cardId));
   });
 }
