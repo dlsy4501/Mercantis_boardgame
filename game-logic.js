@@ -1,10 +1,15 @@
 // 메르칸티스 - 핵심 게임 로직 (서버 전용, 순수 함수 위주)
 const ELIM_SCORE = 24;
-const COIN_TABLE = [3, 3, 2, 0, 0, 0];
+const COIN_TABLE = [3, 2, 1, 0, 0, 0];
 const START_COINS = 3;
 const GOAL_COINS = 20;
+const GOAL_COINS_BY_PLAYERS = { 5: 18, 6: 15 }; // 명시 안 된 인원(3~4인)은 GOAL_COINS 기본값
 const LAND_YIELD_MIN = 1;
 const LAND_YIELD_MAX = 3;
+
+function goalCoinsFor(playerCount) {
+  return GOAL_COINS_BY_PLAYERS[playerCount] ?? GOAL_COINS;
+}
 
 function buildDeck() {
   const d = [];
@@ -13,8 +18,8 @@ function buildDeck() {
   for (const v in attackCounts) {
     for (let i = 0; i < attackCounts[v]; i++) d.push({ id: uid++, type: 'attack', value: Number(v) });
   }
-  for (let i = 0; i < 18; i++) d.push({ id: uid++, type: 'defense' });
-  for (let i = 0; i < 18; i++) d.push({ id: uid++, type: 'shield' });
+  for (let i = 0; i < 12; i++) d.push({ id: uid++, type: 'defense' });
+  for (let i = 0; i < 12; i++) d.push({ id: uid++, type: 'shield' });
   for (let i = d.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [d[i], d[j]] = [d[j], d[i]];
@@ -244,6 +249,7 @@ function checkGoalReached(meta, goal = GOAL_COINS) {
 
 module.exports = {
   ELIM_SCORE, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX,
+  goalCoinsFor,
   buildDeck, createGameState, resolveTurn, defaultAction, nextAliveTag, prevAliveTag,
   freshMeta, computeStandings, awardCoins, awardLandIncome, pickRandomLandYield,
   resolveLandAuction, checkGoalReached

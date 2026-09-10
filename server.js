@@ -5,8 +5,7 @@ const path = require('path');
 const {
   createGameState, resolveTurn, defaultAction, freshMeta,
   computeStandings, awardCoins, awardLandIncome,
-  pickRandomLandYield, resolveLandAuction, checkGoalReached,
-  GOAL_COINS
+  pickRandomLandYield, resolveLandAuction, checkGoalReached, goalCoinsFor
 } = require('./game-logic');
 
 const PORT = process.env.PORT || 3000;
@@ -147,10 +146,11 @@ function finishRound(code) {
     const r = rooms[code];
     if (!r || r.status !== 'playing') return;
 
-    const winnerTag = checkGoalReached(r.meta);
+    const goal = goalCoinsFor(r.players.length);
+    const winnerTag = checkGoalReached(r.meta, goal);
     if (winnerTag) {
       r.status = 'over';
-      io.to(code).emit('game-over', { winnerTag, meta: r.meta });
+      io.to(code).emit('game-over', { winnerTag, meta: r.meta, goal });
       broadcastLobby(code);
       return;
     }

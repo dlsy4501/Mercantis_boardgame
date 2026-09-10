@@ -144,6 +144,7 @@ let lastLobby = null, lastState = null, gameMeta = null;
 let auctionYield = null, lastRoundMsg = '';
 let auctionResultBids = null, auctionResultWinner = null, auctionResultYield = null;
 let gameOverWinner = null;
+let gameOverGoal = GOAL_COINS;
 let submittedThisTurn = -1;
 let myBid = 0;
 let bidSubmitted = false;
@@ -209,8 +210,8 @@ socket.on('land-auction-result', ({meta, bids, winner, yieldValue})=>{
   stopTimer();
   render();
 });
-socket.on('game-over', ({winnerTag, meta})=>{
-  gameOverWinner = winnerTag; gameMeta = meta;
+socket.on('game-over', ({winnerTag, meta, goal})=>{
+  gameOverWinner = winnerTag; gameMeta = meta; gameOverGoal = goal || GOAL_COINS;
   phase = 'over';
   stopTimer();
   render();
@@ -235,8 +236,8 @@ function myPlayer(){ return lastState ? lastState.players[myTag] : null; }
 
 /* ================= 턴 타이머 ================= */
 function startTimer(deadlineTs){
+  if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
   timerDeadline = deadlineTs;
-  stopTimer();
   timerInterval = setInterval(updateTimerDisplay, 250);
   updateTimerDisplay();
 }
@@ -497,7 +498,7 @@ function showRulesModal(){
     <h3>📜 메르칸티스 규칙</h3>
     <div class="rules-scroll">
       <h4>목표</h4>
-      <p><b style="color:var(--gold);">코인 20을 먼저 모으는 상단이 승리</b>합니다. 별도의 최종 결전 없이, 아래 루프를 반복하다 목표에 도달하는 순간 게임이 끝납니다.</p>
+      <p><b style="color:var(--gold);">목표 코인을 먼저 모으는 상단이 승리</b>합니다 (3~4인 20 · 5인 18 · 6인 15). 별도의 최종 결전 없이, 아래 루프를 반복하다 목표에 도달하는 순간 게임이 끝납니다.</p>
 
       <h4>전체 흐름</h4>
       <p>체인게임 한 라운드 진행 → 등수별 코인 지급 → 보유 상관 소득 지급 → 목표 도달 확인 → (미도달 시) 상관 경매 1회 → 다시 체인게임... 반복</p>
@@ -509,12 +510,12 @@ function showRulesModal(){
         <li>보험·면책은 공격당한 뒤가 아니라 이번 턴에 미리 내야 적용됩니다. 면책은 그 턴에만 유효합니다.</li>
       </ul>
 
-      <h4>카드 (총 96장)</h4>
+      <h4>카드 (총 84장)</h4>
       <table>
         <tr><th>종류</th><th>장수</th><th>효과</th></tr>
         <tr><td>부채 전가/밀약</td><td>60장</td><td>부채 전가: 왼쪽 상단에게 부채 전가. 밀약: 전전 상단에 카드 전달, 부채 1 회복</td></tr>
-        <tr><td>보험</td><td>18장</td><td>이번 턴 받을 부채 절반 감소</td></tr>
-        <tr><td>면책</td><td>18장</td><td>자신에게 적용, 이번 턴 자신이 받는 부채 전가 1회 완전 무효</td></tr>
+        <tr><td>보험</td><td>12장</td><td>이번 턴 받을 부채 절반 감소</td></tr>
+        <tr><td>면책</td><td>12장</td><td>자신에게 적용, 이번 턴 자신이 받는 부채 전가 1회 완전 무효</td></tr>
       </table>
 
       <h4>파산과 라운드 종료</h4>
@@ -523,8 +524,9 @@ function showRulesModal(){
       <h4>등수별 코인</h4>
       <table>
         <tr><th>등수</th><th>코인</th></tr>
-        <tr><td>1등, 2등</td><td>각 3코인</td></tr>
-        <tr><td>3등</td><td>2코인</td></tr>
+        <tr><td>1등</td><td>3코인</td></tr>
+        <tr><td>2등</td><td>2코인</td></tr>
+        <tr><td>3등</td><td>1코인</td></tr>
         <tr><td>4~6등</td><td>0코인</td></tr>
       </table>
 
@@ -731,7 +733,7 @@ function overHTML(){
   return `
     <h1>메르칸티스</h1>
     <div class="card-box">
-      <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${gameOverWinner}, 목표 코인 ${GOAL_COINS} 달성으로 교역의 패자가 되다!</h3>
+      <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${gameOverWinner}, 목표 코인 ${gameOverGoal} 달성으로 교역의 패자가 되다!</h3>
       <div>${table}</div>
     </div>
     <button class="primary-btn" id="reload-btn">새 상단 연합 열기</button>

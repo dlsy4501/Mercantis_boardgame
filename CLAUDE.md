@@ -48,7 +48,7 @@ README.md                     실행/배포 안내
 
 - 좌석/방향: 왼쪽=내가 부채를 전가하는 대상, 오른쪽=나에게 부채를 전가하는 상단, 전전 상단=밀약 대상. `nextAliveTag`/`prevAliveTag`로 계산.
 - 시작 손패: 3~4개 상단 7장, 5~6개 상단 5장.
-- 덱 96장: 부채 전가/밀약(1~5, 18/15/12/9/6) 60장, 보험(`type: 'defense'`) 18장, 면책(`type: 'shield'`) 18장.
+- 덱 84장: 부채 전가/밀약(1~5, 18/15/12/9/6) 60장, 보험(`type: 'defense'`) 12장, 면책(`type: 'shield'`) 12장.
 - **면책은 자기방어(셀프실드) 카드다.** 오른쪽 상단에게 부여하던 이전 설계에서 변경됨 — `resolveTurn`에서 `shield` 액션은 `state.players[t].shield = 1`로 **자기 자신**에게 적용되고, 부채 전가 판정에서 `target.shield > 0`(공격받는 쪽의 실드)을 그대로 검사하므로 별도 대상 계산이 필요 없다. 이번 턴에만 유효, 다음 턴으로 이월 안 됨.
 - 매 턴 카드가 있으면 반드시 제출(패스 불가), 전원 동시 처리. 처리 순서: 면책(자기방어)/밀약 → 부채 전가(면책 완전 방어 → 보험 절반 감소) → 사용 카드 제거 → 파산 확정 → 카드 보충.
 - `resolveTurn`은 사람이 읽는 `state.log` 문자열과 별도로, 클라이언트 애니메이션용 구조화 이벤트를 `state.events`(해당 턴에서만 유효, 매 턴 초기화)에 담아 반환한다: `{type:'guard',tag}`(자기방어) / `{type:'trade',from,to,value}` / `{type:'attack',from,to,cardValue,damage,blockedBy}`(`blockedBy`: `'guard'`|`'defend'`|`null`) / `{type:'defend',tag}` / `{type:'none',tag}` / `{type:'eliminate',target,attacker,taken}` / `{type:'draw',tag}`. 순서는 로그와 동일(면책/밀약 → 부채 전가 → 보험/탕진 → 파산 → 보충). 새 이벤트 종류를 추가할 때는 로그 텍스트와 이벤트 둘 다 갱신할 것.
@@ -59,8 +59,8 @@ README.md                     실행/배포 안내
 
 ## 3. 상관 경제 (`game-logic.js` + `server.js`)
 
-- 시작 코인 3 (`START_COINS`), 목표 코인 20 (`GOAL_COINS`).
-- 등수 코인: `COIN_TABLE = [3, 3, 2, 0, 0, 0]` (1·2등 3코인, 3등 2코인, 4~6등 0코인) — `awardCoins`.
+- 시작 코인 3 (`START_COINS`), 목표 코인은 인원수별로 다름 — 3~4인 20, 5인 18, 6인 15 (`GOAL_COINS`/`GOAL_COINS_BY_PLAYERS`, `goalCoinsFor(playerCount)`로 조회). `checkGoalReached(meta, goal)`은 라운드 종료 시 `goalCoinsFor(room.players.length)`로 계산한 값을 넘겨받는다.
+- 등수 코인: `COIN_TABLE = [3, 2, 1, 0, 0, 0]` (1등 3코인, 2등 2코인, 3등 1코인, 4~6등 0코인) — `awardCoins`.
 - 상관 소득: 보유 상관 수익(낙찰 시 1~3 무작위 고정)의 합을 매 라운드 지급 — `awardLandIncome`.
 - 상관 경매: `pickRandomLandYield()`로 수익 공개 → 전원 비공개 동시 입찰(1코인 무효, 0=포기, 올페이) → `resolveLandAuction`이 최고 입찰자에게 상관 지급, 모든 입찰액은 성공 여부와 무관하게 차감.
 - 승리 판정: `checkGoalReached(meta)`가 등수 코인+상관 소득 지급 직후, 다음 경매가 열리기 전에 코인 20 이상 상단을 찾음 (동시 달성 시 코인이 더 많은 쪽).
@@ -78,7 +78,7 @@ README.md                     실행/배포 안내
 | `round-result` | server→client | 라운드 종료 시 등수별 코인 + 상관 소득 지급 결과 메시지 |
 | `land-auction` / `submit-bid` / `bid-submission-update` | 양방향 | 상관 경매 진행 |
 | `land-auction-result` | server→client | 낙찰 결과: `bids`(상단별 입찰액 전체 공개), `winner`, `yieldValue` 포함. 클라이언트는 이걸로 전용 결과 화면(`auction-result`)을 띄운다 |
-| `game-over` | server→client | 목표 코인 20 달성 상단(`winnerTag`)과 최종 `meta` |
+| `game-over` | server→client | 목표 코인 달성 상단(`winnerTag`)과 최종 `meta`, 해당 판의 `goal`(인원수별 목표 코인) |
 
 - 경매가 끝나면 즉시 다음 라운드로 넘어가지 않고, `AUCTION_RESULT_DISPLAY_MS`(기본 4000ms) 동안 결과 화면을 보여준 뒤 서버가 다음 체인게임 라운드를 시작한다 (`tryResolveBids` 내부 `setTimeout`).
 - 라운드를 끝낸 마지막 턴(`finishRound`)도 곧바로 경매로 넘어가지 않는다 — `round-result`를 emit한 뒤 `1000 + 이벤트수*650`ms(최대 8000ms) 만큼 대기해, 클라이언트가 그 턴의 `state.events`를 마저 재생할 시간을 준 다음 `startNextAuction`/`game-over`를 부른다. 이 지연 상수는 클라이언트의 이벤트 재생 간격(650ms/건)에 맞춰져 있으므로, 재생 간격을 바꾸면 이 delay 계산도 같이 조정할 것.
@@ -90,7 +90,7 @@ README.md                     실행/배포 안내
 
 ## 5. 수정 시 유의점
 
-- 규칙 관련 상수(`GOAL_COINS`, `COIN_TABLE`, `START_COINS`, `LAND_YIELD_MIN`/`MAX`, `ELIM_SCORE`)는 모두 `game-logic.js` 상단에 있음. 수치 조정은 여기서.
+- 규칙 관련 상수(`GOAL_COINS`, `GOAL_COINS_BY_PLAYERS`, `COIN_TABLE`, `START_COINS`, `LAND_YIELD_MIN`/`MAX`, `ELIM_SCORE`)는 모두 `game-logic.js` 상단에 있음. 수치 조정은 여기서.
 - `game-logic.js`는 순수 함수 위주로 유지 — 소켓/타이머 등 서버 상태는 `server.js`에만.
 - 클라이언트(`public/index.html`)의 `📜 게임 규칙 보기` 모달은 `게임설명서.md`와 항상 일치시킬 것 — 규칙을 바꾸면 이 모달 텍스트도 같이 수정.
 - 로직을 수정한 뒤에는 `node server.js &` 로 서버를 띄우고 `node integration-test.js`로 전체 루프(방 생성→게임 시작→라운드+경매 반복→목표 코인 달성)가 끝까지 동기화되는지 재검증할 것.
