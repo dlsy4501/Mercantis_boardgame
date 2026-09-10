@@ -85,6 +85,8 @@ README.md                     실행/배포 안내
 
 턴 제한 15초(`TURN_TIMEOUT_MS`), 입찰 제한 15초(`BID_TIMEOUT_MS`) — 시간 초과 시 서버가 기본 행동(가장 약한 부채 전가 카드, 없으면 보험/면책 · 입찰 0)으로 자동 처리. 클라이언트는 같은 상수를 자체적으로 들고 있다가(`public/index.html`의 `TURN_TIMEOUT_MS`/`BID_TIMEOUT_MS`) `state.turnStartedAt`/`land-auction`의 `bidStartedAt` 기준으로 남은 시간을 `#turn-timer`에 1초 단위로 표시한다 — 서버 상수를 바꾸면 클라이언트 쪽도 같이 바꿔야 함(별도 payload로 전달하지 않음).
 
+턴 타이머는 `animGraceMs(state)`(= `state.events.length * ANIM_STEP_MS`)만큼 더 미뤄서 시작한다 — 클라이언트가 이전 턴 결과를 재생하는 동안은 실제로 카드를 못 내므로, 재생이 끝난 뒤에야 15초가 온전히 남아 있어야 한다. `scheduleTimeoutCheck`/`tryResolveTurn`의 서버 마감과 클라이언트의 `deadline`(state-update 핸들러에서 `state.turnStartedAt + eventsToPlay.length*ANIM_STEP_MS + TURN_TIMEOUT_MS`로 계산) 계산식이 항상 같은 이벤트 수를 세도록 맞춰져 있으니, 둘 중 하나만 고치면 표시된 시간과 실제 마감이 어긋난다.
+
 ### 턴 결과 애니메이션과 상태 동기화
 `state-update`(또는 `round-result`)로 `state.events`가 있는 새 상태가 도착해도, 클라이언트는 화면을 곧바로 그 상태로 바꾸지 않는다. 대신 `lastState`(화면에 보이는 이전 턴)를 그대로 유지한 채 이벤트를 하나씩(650ms 간격) 재생하면서, 그 순간에 실제로 영향받는 좌석의 부채/카드수/생존 여부만 `local` 작업본(`playTurnEvents` 내부)으로 갱신해 DOM에 반영한다. 모든 이벤트가 끝나야 `lastState`를 최종 상태로 교체하고 전체 `render()`를 다시 부른다. 이렇게 하는 이유는 "공격 애니메이션이 뜨기도 전에 부채 숫자가 먼저 올라 있는" 것처럼 보이는 걸 막기 위함 — 이 로직(`applyEventToLocal`/`updateSeatDOM`)을 건드릴 때는 반드시 `resolveTurn`이 이벤트를 만드는 순서(근위대/밀약 → 부채 전가 → 파산 → 보충)와 동일하게 순서를 맞출 것. 애니메이션 재생 중에는 `animating` 플래그로 손패 클릭을 막아, 이미 낸(곧 사라질) 카드가 다시 제출되지 않도록 한다.
 

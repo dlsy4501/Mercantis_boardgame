@@ -13,6 +13,13 @@ const TURN_TIMEOUT_MS = 15000;
 const BID_TIMEOUT_MS = 15000;
 const BOT_AUTO_BID = 2; // 봇이 경매에서 자동으로 제시하는 고정 입찰액
 const AUCTION_RESULT_DISPLAY_MS = 4000; // 경매 결과를 보여주고 다음 라운드로 넘어가기까지 대기 시간
+const ANIM_STEP_MS = 430; // 클라이언트가 턴 결과 이벤트 하나를 재생하는 데 걸리는 시간과 맞춤 (기존 650의 1.5배 속도)
+
+// 클라이언트가 이전 턴 결과를 재생하는 동안은 실제로 카드를 낼 수 없으므로,
+// 그 재생 시간만큼 타임아웃 기준 시각을 미뤄줘야 "고민 시간"이 15초 그대로 보장된다.
+function animGraceMs(state) {
+  return (state.events ? state.events.length : 0) * ANIM_STEP_MS;
+}
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -100,12 +107,13 @@ function scheduleTimeoutCheck(code) {
   const room = rooms[code];
   if (!room || room.status !== 'playing' || !room.state) return;
   const turnAtSchedule = room.state.turn;
+  const grace = animGraceMs(room.state);
   setTimeout(() => {
     const r = rooms[code];
     if (!r || !r.state || r.state.phase !== 'playing') return;
     if (r.state.turn !== turnAtSchedule) return;
     tryResolveTurn(code, true);
-  }, TURN_TIMEOUT_MS + 500);
+  }, TURN_TIMEOUT_MS + grace + 500);
 }
 
 function tryResolveTurn(code, forceTimeout) {
@@ -115,7 +123,7 @@ function tryResolveTurn(code, forceTimeout) {
   const aliveTags = state.seatOrder.filter(t => state.players[t].alive);
   const needed = aliveTags.filter(t => state.players[t].hand.length > 0);
   const submitted = needed.filter(t => room.pendingActions[t] !== undefined);
-  const timedOut = forceTimeout || (Date.now() - state.turnStartedAt) > TURN_TIMEOUT_MS;
+  const timedOut = forceTimeout || (Date.now() - state.turnStartedAt) > TURN_TIMEOUT_MS + animGraceMs(state);
   if (submitted.length < needed.length && !timedOut) return;
 
   resolveTurn(state, room.pendingActions);
@@ -140,8 +148,7 @@ function finishRound(code) {
 
   // 라운드를 끝낸 마지막 턴의 결과(부채 전가/파산 등)를 클라이언트가 재생할 시간을 준 뒤
   // 다음 경매(또는 게임 종료)로 넘어간다.
-  const eventCount = finishedState.events ? finishedState.events.length : 0;
-  const delay = Math.min(8000, 1000 + eventCount * 650);
+  const delay = Math.min(8000, 1000 + animGraceMs(finishedState));
   setTimeout(() => {
     const r = rooms[code];
     if (!r || r.status !== 'playing') return;
