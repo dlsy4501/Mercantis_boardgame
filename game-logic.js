@@ -6,6 +6,11 @@ const GOAL_COINS = 20;
 const GOAL_COINS_BY_PLAYERS = { 5: 18, 6: 15 }; // 명시 안 된 인원(3~4인)은 GOAL_COINS 기본값
 const LAND_YIELD_MIN = 1;
 const LAND_YIELD_MAX = 3;
+const LAND_ROUNDS_BY_YIELD = { 1: 6, 2: 4, 3: 3 }; // 수익이 클수록 더 빨리 소멸 — 상관 하나의 총 기대 수익을 비슷하게 맞춰 영향력을 줄임
+
+function landRoundsFor(yieldValue) {
+  return LAND_ROUNDS_BY_YIELD[yieldValue] ?? 1;
+}
 
 function goalCoinsFor(playerCount) {
   return GOAL_COINS_BY_PLAYERS[playerCount] ?? GOAL_COINS;
@@ -212,11 +217,14 @@ function awardCoins(meta, standings) {
   return `이번 라운드 결과: ${standings.map((t, i) => `${i + 1}위 ${t}(+${COIN_TABLE[i] ?? 0}코인)`).join(', ')}`;
 }
 
-// 보유한 상관 수익 합만큼 코인을 지급한다
+// 보유한 상관 수익 합만큼 코인을 지급하고, 남은 유효 라운드를 소진한 상관은 제거한다
 function awardLandIncome(meta) {
   Object.keys(meta).forEach(tag => {
-    const income = meta[tag].lands.reduce((a, b) => a + b, 0);
-    meta[tag].coins += income;
+    const m = meta[tag];
+    let income = 0;
+    m.lands.forEach(land => { income += land.yield; land.roundsLeft -= 1; });
+    m.lands = m.lands.filter(land => land.roundsLeft > 0);
+    m.coins += income;
   });
 }
 
@@ -236,8 +244,9 @@ function resolveLandAuction(meta, yieldValue, bids) {
     if (b > highest) { highest = b; winner = tag; }
   });
   if (!winner) return { msg: '이번 상관은 아무도 낙찰받지 못했습니다.', winner: null, yieldValue };
-  meta[winner].lands.push(yieldValue);
-  return { msg: `${winner}이(가) 상관(수익 ${yieldValue}코인/라운드)을 ${highest}코인에 낙찰!`, winner, yieldValue };
+  const rounds = landRoundsFor(yieldValue);
+  meta[winner].lands.push({ yield: yieldValue, roundsLeft: rounds });
+  return { msg: `${winner}이(가) 상관(수익 ${yieldValue}코인/라운드, ${rounds}라운드 유효)을 ${highest}코인에 낙찰!`, winner, yieldValue };
 }
 
 // 목표 코인에 도달한 상단 태그를 반환한다 (없으면 null, 동시 달성 시 코인이 가장 많은 쪽)
@@ -248,8 +257,8 @@ function checkGoalReached(meta, goal = GOAL_COINS) {
 }
 
 module.exports = {
-  ELIM_SCORE, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX,
-  goalCoinsFor,
+  ELIM_SCORE, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX, LAND_ROUNDS_BY_YIELD,
+  goalCoinsFor, landRoundsFor,
   buildDeck, createGameState, resolveTurn, defaultAction, nextAliveTag, prevAliveTag,
   freshMeta, computeStandings, awardCoins, awardLandIncome, pickRandomLandYield,
   resolveLandAuction, checkGoalReached

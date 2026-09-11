@@ -246,6 +246,25 @@ io.on('connection', (socket) => {
     broadcastLobby(code);
   });
 
+  // 로비(대기 중)에서 방 나가기 — 호스트가 나가면 다음 사람이 새 호스트, 사람이 아무도 안 남으면 방 삭제
+  socket.on('leave-room', (_, cb) => {
+    const code = socket.data.code, tag = socket.data.tag;
+    const room = rooms[code];
+    socket.leave(code);
+    socket.data.tag = null; socket.data.code = null;
+    if (!room) return cb && cb({ ok: true });
+    if (room.status !== 'waiting') return cb && cb({ ok: false, error: '게임이 시작된 뒤에는 나갈 수 없습니다.' });
+    room.players = room.players.filter(p => p !== tag);
+    const remainingHumans = room.players.filter(p => !room.bots.has(p));
+    if (remainingHumans.length === 0) {
+      delete rooms[code];
+      return cb && cb({ ok: true });
+    }
+    if (room.hostTag === tag) room.hostTag = remainingHumans[0];
+    cb && cb({ ok: true });
+    broadcastLobby(code);
+  });
+
   // 호스트가 로비에서 봇 상단을 추가 (사람 3명이 모이지 않아도 봇으로 채워 시작 가능)
   socket.on('add-bot', (_, cb) => {
     const code = socket.data.code, tag = socket.data.tag;

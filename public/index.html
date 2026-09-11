@@ -51,10 +51,7 @@
   .card.via-trade{ border-color:var(--coop); border-width:2px; }
   .card.via-trade::after{ content:'🤝'; position:absolute; top:-7px; right:-7px; font-size:12px;
     background:var(--ink); border-radius:50%; line-height:1; padding:1px; }
-  .card.selected{ border-color:var(--gold); border-width:2px; box-shadow:0 0 0 2px var(--gold); transform:translateY(-4px); }
   #status-line{ text-align:center; font-size:13px; color:var(--gold); min-height:18px; margin-bottom:8px; }
-  .confirm-row{ display:flex; gap:8px; margin-bottom:10px; }
-  .confirm-row button{ margin-top:0; }
   #modal-overlay{ position:fixed; inset:0; background:rgba(10,7,5,0.75); display:none;
     align-items:center; justify-content:center; padding:20px; z-index:50; }
   #modal-overlay.show{ display:flex; }
@@ -74,6 +71,7 @@
   #modal button{ flex:1; padding:11px 0; border-radius:8px; border:none; font-size:13px; font-weight:700; }
   #modal .yes{ background:var(--coop); color:#f1ecff; }
   #modal .no{ background:var(--panel-2); color:var(--cream); border:1px solid var(--line); }
+  #modal .cancel{ background:transparent; color:var(--cream-dim); border:1px solid var(--line); }
   .conn-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
   .conn-ok{ background:#5b8a4c; } .conn-bad{ background:var(--attack); }
   .land-display{ text-align:center; font-size:44px; margin:8px 0 4px; }
@@ -138,6 +136,7 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 const GOAL_COINS = 20;
+const LAND_ROUNDS_BY_YIELD = { 1: 6, 2: 4, 3: 3 }; // game-logic.js의 LAND_ROUNDS_BY_YIELD와 동일
 const TURN_TIMEOUT_MS = 15000;
 const BID_TIMEOUT_MS = 15000;
 const ANIM_STEP_MS = 430; // 서버 animGraceMs와 동일해야 타이머 표시가 실제 마감과 맞는다 (기존 650의 1.5배 속도)
@@ -150,7 +149,6 @@ let auctionResultBids = null, auctionResultWinner = null, auctionResultYield = n
 let gameOverWinner = null;
 let gameOverGoal = GOAL_COINS;
 let submittedThisTurn = -1;
-let selectedCard = null; // {type, cardId} — 제출 버튼을 누르기 전까지의 임시 선택
 let myBid = 0;
 let bidSubmitted = false;
 let errorMsg = '';
@@ -169,7 +167,6 @@ socket.on('lobby-update', (lobby)=>{
 });
 socket.on('state-update', ({state, meta})=>{
   if(state.turn===1) submittedThisTurn = -1; // 새 라운드 시작 — 이전 라운드의 제출 기록 초기화
-  selectedCard = null; // 새 턴 — 이전 턴의 임시 선택은 무효
   gameMeta = meta;
   const prevState = (phase === 'game') ? lastState : null;
   const eventsToPlay = (prevState && state.events && state.events.length) ? state.events : [];
@@ -445,6 +442,14 @@ function joinRoom(){
 function hostStartGame(){
   socket.emit('start-game', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
 }
+function leaveRoom(){
+  socket.emit('leave-room', {}, (res)=>{
+    if(res && !res.ok){ errorMsg = res.error; render(); return; }
+    myTag = ''; roomCode = ''; isHost = false; lastLobby = null;
+    phase = 'landing'; errorMsg = '';
+    render();
+  });
+}
 function addBot(){
   socket.emit('add-bot', {}, (res)=>{ if(res && !res.ok){ errorMsg = res.error; render(); } });
 }
@@ -474,42 +479,53 @@ function toggleSelect(cardId){
     showModal({
       title:'이 카드를 어떻게 쓸까요?',
       body:`부채 전가(${card.value})로 ${lt}에게 부채를 넘길까요, 아니면 밀약으로 ${xt}에 카드를 지원하고 내 부채를 진정시킬까요?`,
-      yesLabel:`부채 전가 (${card.value})`, noLabel:`밀약 (${xt}에 지원)`,
-      onYes: ()=>selectCard('attack', cardId),
-      onNo: ()=>selectCard('trade', cardId)
+      buttons:[
+        { label:`부채 전가 (${card.value})`, cls:'yes', onClick:()=>submitAction('attack', cardId) },
+        { label:`밀약 (${xt}에 지원)`, cls:'no', onClick:()=>submitAction('trade', cardId) },
+        { label:'취소', cls:'cancel', onClick:()=>{} }
+      ]
     });
     return;
   }
-  if(card.type==='defense'){ selectCard('defend', cardId); return; }
-  if(card.type==='shield'){ selectCard('shield', cardId); return; }
-}
-function selectCard(type, cardId){
-  selectedCard = {type, cardId};
-  render();
-}
-function cancelSelect(){
-  selectedCard = null;
-  render();
-}
-function confirmSubmit(){
-  if(!selectedCard) return;
-  submitAction(selectedCard.type, selectedCard.cardId);
+  if(card.type==='defense'){
+    showModal({
+      title:'보험을 낼까요?',
+      body:'이번 턴 자신이 받을 부채를 절반으로 줄입니다.',
+      buttons:[
+        { label:'제출', cls:'yes', onClick:()=>submitAction('defend', cardId) },
+        { label:'취소', cls:'cancel', onClick:()=>{} }
+      ]
+    });
+    return;
+  }
+  if(card.type==='shield'){
+    showModal({
+      title:'면책을 낼까요?',
+      body:'이번 턴 자신이 받는 부채 전가를 1회 완전히 무효화합니다.',
+      buttons:[
+        { label:'제출', cls:'yes', onClick:()=>submitAction('shield', cardId) },
+        { label:'취소', cls:'cancel', onClick:()=>{} }
+      ]
+    });
+    return;
+  }
 }
 function submitAction(type, cardId){
   socket.emit('submit-action', {type, cardId});
   submittedThisTurn = lastState.turn;
-  selectedCard = null;
   render();
 }
-function showModal({title, body, yesLabel, noLabel, onYes, onNo}){
+function showModal({title, body, buttons}){
   const overlay = document.getElementById('modal-overlay');
   const modal = document.getElementById('modal');
   modal.classList.remove('rules-modal');
-  modal.innerHTML = `<h3>${title}</h3><p>${body}</p>
-    <div class="row"><button class="no" id="modal-no">${noLabel}</button><button class="yes" id="modal-yes">${yesLabel}</button></div>`;
+  const btnHTML = buttons.map((b,i)=>`<button class="${b.cls}" data-btn-i="${i}">${b.label}</button>`).join('');
+  modal.innerHTML = `<h3>${title}</h3><p>${body}</p><div class="row">${btnHTML}</div>`;
   overlay.classList.add('show');
-  document.getElementById('modal-yes').onclick = ()=>{ overlay.classList.remove('show'); onYes(); };
-  document.getElementById('modal-no').onclick = ()=>{ overlay.classList.remove('show'); onNo(); };
+  modal.querySelectorAll('[data-btn-i]').forEach(el=>{
+    const b = buttons[Number(el.dataset.btnI)];
+    el.onclick = ()=>{ overlay.classList.remove('show'); b.onClick(); };
+  });
 }
 
 function showRulesModal(){
@@ -555,7 +571,8 @@ function showRulesModal(){
       <h4>상관과 경매</h4>
       <ul>
         <li>모든 상단은 <b>3코인</b>으로 시작합니다.</li>
-        <li>상관을 보유하면 매 라운드 등수 코인과 별도로 <b>고정 수익(1~3코인)</b>을 받습니다. 수익은 낙찰 시 무작위로 정해지고 이후 계속 동일합니다.</li>
+        <li>상관을 보유하면 매 라운드 등수 코인과 별도로 <b>고정 수익(1~3코인)</b>을 받습니다. 수익은 낙찰 시 무작위로 정해집니다.</li>
+        <li>상관은 영구적이지 않습니다 — 수익이 클수록 더 빨리 소멸합니다: <b>1코인 6라운드 · 2코인 4라운드 · 3코인 3라운드</b> 유효.</li>
         <li>경매는 1코인 단위로 자유 입찰하되 <b>1코인 단독 입찰은 불가</b>(0=포기, 2 이상만 유효)합니다.</li>
         <li><b style="color:var(--attack);">입찰액은 낙찰에 실패해도 돌려받지 못합니다</b> (올페이 방식).</li>
       </ul>
@@ -620,6 +637,7 @@ function lobbyHTML(){
       <button class="primary-btn" id="start-game-btn" ${canStart?'':'disabled'}>게임 시작</button>
       <div class="sub" style="text-align:center;">${canStart?'':'최소 3개 상단이 모여야 시작할 수 있습니다.'}</div>`
       : `<div class="sub" style="text-align:center;">호스트(${lobby.hostTag})가 전쟁을 시작하기를 기다리는 중...</div>`}
+    <button class="ghost-btn" id="leave-room-btn">방 나가기</button>
     ${errorMsg?`<div class="sub" style="color:var(--attack);text-align:center;">${errorMsg}</div>`:''}
   `;
 }
@@ -638,7 +656,7 @@ function auctionHTML(){
     <div class="card-box">
       <div class="land-display">🏞</div>
       <div class="land-name">새 상관 — 예상 수익 +${auctionYield}코인/라운드</div>
-      <div class="sub" style="text-align:center;font-size:12px;">낙찰받으면 이 상관을 보유하는 한 매 라운드 ${auctionYield}코인이 들어옵니다.</div>
+      <div class="sub" style="text-align:center;font-size:12px;">낙찰받으면 ${LAND_ROUNDS_BY_YIELD[auctionYield] || 1}라운드 동안 매 라운드 ${auctionYield}코인이 들어옵니다.</div>
       <div class="bid-row">
         <button class="bid-btn" id="bid-minus">−</button>
         <div class="bid-value">${myBid}</div>
@@ -666,7 +684,7 @@ function auctionResultHTML(){
     <div class="card-box">
       <div class="land-display">🏞</div>
       <div class="land-name">${auctionResultWinner ? `${auctionResultWinner} 낙찰!` : '아무도 낙찰받지 못함'}</div>
-      ${auctionResultWinner ? `<div class="sub" style="text-align:center;">이 상관의 수익은 +${auctionResultYield}코인/라운드입니다.</div>` : ''}
+      ${auctionResultWinner ? `<div class="sub" style="text-align:center;">이 상관은 ${LAND_ROUNDS_BY_YIELD[auctionResultYield] || 1}라운드 동안 매 라운드 +${auctionResultYield}코인을 줍니다.</div>` : ''}
     </div>
     <div class="card-box">${rows}</div>
     <div class="sub" style="text-align:center;">잠시 후 다음 체인게임 라운드가 시작됩니다...</div>
@@ -713,8 +731,7 @@ function gameHTML(){
     me.hand.forEach(c=>{
       const info = cardLabel(c);
       const tradeCls = c.viaTrade ? ' via-trade' : '';
-      const selectedCls = selectedCard && selectedCard.cardId===c.id ? ' selected' : '';
-      handHTML += `<div class="card ${c.type}${tradeCls}${selectedCls}" data-card-id="${c.id}">
+      handHTML += `<div class="card ${c.type}${tradeCls}" data-card-id="${c.id}">
         <div class="num">${info.extra}</div><div class="label">${info.label}</div></div>`;
     });
   }
@@ -723,13 +740,7 @@ function gameHTML(){
   if(!me || !me.alive) statusText = '우리 상단은 파산했습니다. 남은 정세를 지켜보세요.';
   else if(me.hand.length===0) statusText = '낼 카드가 없습니다 — 국고 탕진 상태 (자동 관망 처리됩니다)';
   else if(alreadySubmitted) statusText = '제출 완료. 다른 상단의 결정을 기다리는 중...';
-  else if(selectedCard) statusText = '이 카드를 낼까요? 제출을 눌러 확정하세요.';
   else statusText = '이번 턴에 낼 카드를 고르세요.';
-  const confirmRowHTML = (selectedCard && !alreadySubmitted) ? `
-    <div class="confirm-row">
-      <button class="ghost-btn" id="cancel-select-btn">✕ 취소</button>
-      <button class="primary-btn" id="confirm-submit-btn">제출</button>
-    </div>` : '';
   const meta = gameMeta || {};
   const coinStrip = state.seatOrder.map(t=>{
     const m = meta[t];
@@ -750,7 +761,6 @@ function gameHTML(){
       ${seatsHTML}
     </div>
     <div id="status-line">${statusText}</div>
-    ${confirmRowHTML}
     <div id="log">${state.log.slice(-30).map(m=>`<div>${m}</div>`).join('')}</div>
     <div id="hand">${handHTML || '<div class="sub">해당 없음</div>'}</div>
   `;
@@ -775,6 +785,7 @@ function attachHandlers(){
   const c2=document.getElementById('join-btn'); if(c2) c2.onclick=joinRoom;
   const c3=document.getElementById('start-game-btn'); if(c3) c3.onclick=hostStartGame;
   const c4=document.getElementById('reload-btn'); if(c4) c4.onclick=()=>location.reload();
+  const lr=document.getElementById('leave-room-btn'); if(lr) lr.onclick=leaveRoom;
   const ab=document.getElementById('add-bot-btn'); if(ab) ab.onclick=addBot;
   document.querySelectorAll('[data-remove-bot]').forEach(el=>{
     el.onclick = ()=>removeBot(el.dataset.removeBot);
@@ -787,8 +798,6 @@ function attachHandlers(){
     if(alreadySubmitted || animating){ el.classList.add('disabled'); return; }
     el.onclick = ()=>toggleSelect(Number(el.dataset.cardId));
   });
-  const cs=document.getElementById('confirm-submit-btn'); if(cs) cs.onclick=confirmSubmit;
-  const xs=document.getElementById('cancel-select-btn'); if(xs) xs.onclick=cancelSelect;
 }
 render();
 </script>
