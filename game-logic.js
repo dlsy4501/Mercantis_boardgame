@@ -1,5 +1,8 @@
 // 메르칸티스 - 핵심 게임 로직 (서버 전용, 순수 함수 위주)
 const ELIM_SCORE = 24;
+// 레버리지 선언(도박수): 부채 전가 카드를 레버리지로 내면 내 피해가 커지고, 이번 턴 내가 받는 부채도 커진다. (수치 잠정)
+const LEVERAGE_ATTACK_BONUS = 2;
+const LEVERAGE_EXPOSURE_BONUS = 2;
 const COIN_TABLE = [3, 2, 1, 0, 0, 0];
 const START_COINS = 3;
 const GOAL_COINS = 20;
@@ -103,7 +106,10 @@ function resolveTurn(state, rawActions) {
     if (p.hand.length === 0) { actions[t] = { type: 'none', card: null }; return; }
     const raw = rawActions[t];
     const card = raw ? p.hand.find(c => c.id === raw.cardId) : null;
-    actions[t] = card ? { type: raw.type, card } : defaultAction(p);
+    // 레버리지는 부채 전가(attack)에만 붙는다. 밀약/보험/면책에 붙은 값은 무시한다.
+    actions[t] = card
+      ? { type: raw.type, card, leverage: raw.type === 'attack' && raw.leverage === true }
+      : defaultAction(p);
   });
 
   const order = state.seatOrder.filter(t => state.players[t].alive && actions[t]);
@@ -112,6 +118,14 @@ function resolveTurn(state, rawActions) {
   addLog(`── 턴 ${state.turn} 결과 ──`);
 
   order.forEach(t => { state.players[t].shield = 0; });
+
+  // 0) 레버리지 선언 공개
+  for (const t of order) {
+    if (actions[t].leverage) {
+      addLog(`🎲 ${t}: 레버리지 선언 — 부채 전가 +${LEVERAGE_ATTACK_BONUS}, 이번 턴 받는 부채 +${LEVERAGE_EXPOSURE_BONUS}`);
+      events.push({ type: 'leverage', tag: t });
+    }
+  }
 
   // 1) 면책(자기방어) / 밀약
   for (const t of order) {
@@ -137,16 +151,18 @@ function resolveTurn(state, rawActions) {
     if (act.type !== 'attack') continue;
     const tt = nextAliveTag(state, t);
     const target = state.players[tt];
+    const tAct = actions[tt];
     let dmg = act.card.value, note = '', blockedBy = null;
+    if (act.leverage) { dmg += LEVERAGE_ATTACK_BONUS; note += ` (레버리지 +${LEVERAGE_ATTACK_BONUS})`; }
+    if (tAct && tAct.leverage) { dmg += LEVERAGE_EXPOSURE_BONUS; note += ` (상대 레버리지 노출 +${LEVERAGE_EXPOSURE_BONUS})`; }
     if (target.shield > 0) {
-      target.shield -= 1; dmg = 0; note = ' → 면책으로 완전 방어!'; blockedBy = 'guard';
+      target.shield -= 1; dmg = 0; note += ' → 면책으로 완전 방어!'; blockedBy = 'guard';
     } else {
-      const tAct = actions[tt];
-      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note = ` → 보험으로 절반 감소 (${dmg})`; blockedBy = 'defend'; }
+      if (tAct && tAct.type === 'defend') { dmg = Math.floor(dmg / 2); note += ` → 보험으로 절반 감소 (${dmg})`; blockedBy = 'defend'; }
     }
     target.score += dmg;
     addLog(`🔴 ${t}: 부채 전가(${act.card.value}) → ${tt}${note} (현재 부채 ${target.score})`);
-    events.push({ type: 'attack', from: t, to: tt, cardValue: act.card.value, damage: dmg, blockedBy });
+    events.push({ type: 'attack', from: t, to: tt, cardValue: act.card.value, damage: dmg, blockedBy, leverage: act.leverage === true });
     if (target.score >= ELIM_SCORE) eliminations.push({ attacker: t, target: tt });
   }
 
@@ -257,7 +273,7 @@ function checkGoalReached(meta, goal = GOAL_COINS) {
 }
 
 module.exports = {
-  ELIM_SCORE, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX, LAND_ROUNDS_BY_YIELD,
+  ELIM_SCORE, LEVERAGE_ATTACK_BONUS, LEVERAGE_EXPOSURE_BONUS, COIN_TABLE, START_COINS, GOAL_COINS, LAND_YIELD_MIN, LAND_YIELD_MAX, LAND_ROUNDS_BY_YIELD,
   goalCoinsFor, landRoundsFor,
   buildDeck, createGameState, resolveTurn, defaultAction, nextAliveTag, prevAliveTag,
   freshMeta, computeStandings, awardCoins, awardLandIncome, pickRandomLandYield,

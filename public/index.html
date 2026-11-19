@@ -5,13 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>메르칸티스 — 실시간 멀티플레이</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Noto+Serif+KR:wght@500;700;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;700;900&family=Noto+Serif+KR:wght@500;700;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
   :root{
-    --ink:#120e0a; --panel:#1c150e; --panel-2:#251b12;
-    --cream:#e9dcc0; --cream-dim:#ab9b78;
-    --attack:#7a1f2b; --attack-dim:#4a1420;
-    --coop:#5b4a8a; --coop-dim:#392c5c;
-    --gold:#b8912f; --line:#3c2f1f;
+    /* 아라비안 팔레트: 라피스 / 터쿼이즈 / 사프란 / 테라코타 / 석회 상아 / 금박 */
+    --ink:#0c1a33; --panel:#12274a; --panel-2:#183560;
+    --cream:#f3e9d0; --cream-dim:#c8b88e;
+    --attack:#e07a62; --attack-dim:#8a3220;
+    --coop:#8566bd; --coop-dim:#4d3a78;
+    --gold:#d8b25a; --line:#3a5a8c;
+    --gold-dim:#8f7536; --turq:#2fa59b; --saffron:#e3a72f; --terra:#b5472f; --terra-dk:#7d2a1a; --lapis-2:#1b4175;
+    --font-d:'Cinzel Decorative','Cinzel','Noto Serif KR',serif;
+    --star:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23d8b25a' stroke-width='1' opacity='.55'%3E%3Cpath d='M28 4l6.5 10.5L46 12l-2.5 11.5L54 28l-10.5 4.5L46 44l-11.5-2.5L28 52l-6.500-10.500L10 44l2.500-11.500L2 28l10.500-4.500L10 12l11.500 2.500z'/%3E%3Ccircle cx='28' cy='28' r='5'/%3E%3C/g%3E%3C/svg%3E");
+    --lattice:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 0L24 12L12 24L0 12Z' fill='none' stroke='%23d8b25a' stroke-width='.8' opacity='.35'/%3E%3C/svg%3E");
   }
   *{box-sizing:border-box;}
   body{ margin:0; background:var(--ink); color:var(--cream); font-family:'IBM Plex Sans KR', sans-serif;
@@ -127,6 +132,88 @@
   .float-text.blocked{ color:var(--gold); }
   .timer{ text-align:center; font-family:'Cinzel',serif; font-size:15px; font-weight:800; color:var(--gold); margin-bottom:6px; }
   .timer.timer-low{ color:var(--attack); }
+
+  /* ===== 아라비안 건축 양식 장식 (기존 규칙 위에 덧씌움) ===== */
+  body{ background: radial-gradient(120% 60% at 50% -10%, #1f4a86 0%, transparent 60%), var(--star) 0 0/56px 56px, var(--ink); line-height:1.5; padding-bottom:40px; }
+  .gold{ color:var(--gold); }
+  .portal{ position:relative; margin:6px auto 16px; width:100%; text-align:center; }
+  .portal svg.arch{ width:100%; height:auto; display:block; }
+  .portal .portal-text{ position:absolute; left:0; right:0; top:34%; padding:0 24px; }
+  .portal h1{ font-family:var(--font-d); font-weight:900; font-size:27px; margin:0; letter-spacing:.06em; color:var(--cream); text-shadow:0 2px 0 var(--terra-dk), 0 0 18px rgba(216,178,90,.35); }
+  .portal .portal-sub{ font-family:'Noto Serif KR',serif; font-size:12.5px; color:var(--gold); margin-top:4px; letter-spacing:.04em; }
+  .portal.small .portal-text{ top:36%; } .portal.small h1{ font-size:19px; }
+  h1.title-mini{ text-align:center; font-family:var(--font-d); font-size:16px; letter-spacing:.14em; color:var(--gold); margin:2px 0 6px; }
+  h1.title-mini::before,h1.title-mini::after{ content:'◆'; font-size:8px; margin:0 10px; color:var(--turq); vertical-align:middle; }
+  .center{ text-align:center; }
+  .orn{ display:flex; align-items:center; gap:10px; margin:14px 0; }
+  .orn::before,.orn::after{ content:''; flex:1; height:1px; background:linear-gradient(90deg,transparent,var(--gold-dim),transparent); }
+  .orn i{ width:10px; height:10px; transform:rotate(45deg); border:1px solid var(--gold); background:var(--turq); box-shadow:0 0 0 3px var(--ink),0 0 0 4px var(--gold-dim); }
+  .card-box{ position:relative; border:1px solid var(--gold-dim); border-radius:0; padding:18px 16px 16px;
+    background:linear-gradient(180deg,rgba(27,65,117,.55),rgba(12,26,51,.85)), var(--lattice) 0 0/24px 24px;
+    clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
+    box-shadow:inset 0 0 0 4px var(--ink), inset 0 0 0 5px rgba(216,178,90,.45); }
+  label.field-label{ font-family:'Noto Serif KR',serif; color:var(--gold); }
+  input.text-input{ background:rgba(6,14,30,.7); border:1px solid var(--gold-dim); border-radius:999px 999px 6px 6px / 22px 22px 6px 6px; font-size:16px; }
+  input.text-input:focus{ outline:2px solid var(--turq); outline-offset:2px; }
+  .primary-btn,.ghost-btn{ position:relative; isolation:isolate; cursor:pointer; font-family:'Noto Serif KR',serif; font-weight:700;
+    clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,16px 100%,0 50%); }
+  .primary-btn{ border:0; border-radius:0; color:#fff6e4; background:var(--gold); }
+  .primary-btn::after{ content:''; position:absolute; inset:2px; z-index:-1; clip-path:polygon(15px 0,calc(100% - 15px) 0,100% 50%,calc(100% - 15px) 100%,15px 100%,0 50%); background:linear-gradient(180deg,var(--terra),var(--terra-dk)); }
+  .primary-btn:disabled{ filter:grayscale(.8) brightness(.6); cursor:not-allowed; opacity:1; }
+  .ghost-btn{ border:0; border-radius:0; color:var(--gold); background:var(--gold-dim); }
+  .ghost-btn::after{ content:''; position:absolute; inset:1.5px; z-index:-1; background:var(--ink); clip-path:polygon(15px 0,calc(100% - 15px) 0,100% 50%,calc(100% - 15px) 100%,15px 100%,0 50%); }
+  .ghost-btn:disabled{ filter:grayscale(.8) brightness(.6); }
+  .primary-btn:focus-visible,.ghost-btn:focus-visible,.card:focus-visible,#modal button:focus-visible,.bid-btn:focus-visible{ outline:2px solid var(--turq); outline-offset:3px; }
+  .player-row{ border-bottom:1px dashed rgba(216,178,90,.28); }
+  .player-row:last-child{ border-bottom:0; }
+  .tag-host{ color:var(--turq); }
+  .code-display{ font-family:var(--font-d); font-size:38px; font-weight:900; letter-spacing:.3em; padding-left:.3em; color:var(--saffron); text-shadow:0 0 22px rgba(227,167,47,.35); }
+  #status-line{ font-family:'Noto Serif KR',serif; color:var(--saffron); }
+  #log{ background:rgba(6,14,30,.65); border:1px solid rgba(216,178,90,.3); border-radius:4px 4px 14px 14px; }
+  .coin-strip{ border-color:rgba(216,178,90,.3); }
+  .coin-chip{ background:rgba(6,14,30,.6); border:1px solid rgba(216,178,90,.2); }
+  .timer{ font-family:var(--font-d); }
+  .seat-circle::before{ border:1px solid rgba(216,178,90,.4); background:var(--lattice) 0 0/24px 24px; opacity:.8; }
+  .seat{ background:linear-gradient(180deg,var(--lapis-2),var(--panel)); border:1px solid var(--gold-dim); border-radius:42px 42px 10px 10px; padding:10px 4px 6px; box-shadow:0 4px 10px rgba(0,0,0,.4); }
+  .seat.seat-me{ border-color:var(--saffron); box-shadow:0 0 0 1px var(--saffron), 0 4px 10px rgba(0,0,0,.4); }
+  .seat.seat-fx-leverage{ box-shadow:0 0 0 2px var(--saffron), 0 0 14px rgba(227,167,47,.6); }
+  .seat .seat-mark.a{ color:#ffb09c; }
+  .deck-pile .deck-card{ border-color:var(--gold); }
+  #hand{ gap:10px; padding:6px 4px 12px; }
+  .card{ width:66px; height:98px; border:0; border-radius:33px 33px 6px 6px / 40px 40px 6px 6px; justify-content:flex-end; gap:2px; padding-bottom:10px; color:var(--cream);
+    background:linear-gradient(180deg,var(--lapis-2),var(--panel)); box-shadow:inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--gold-dim), 0 6px 12px rgba(0,0,0,.45); transition:transform .15s; }
+  .card:hover{ transform:translateY(-6px); }
+  .card::before{ content:''; position:absolute; top:12px; left:50%; width:9px; height:9px; margin-left:-4.5px; transform:rotate(45deg); background:var(--gold); opacity:.8; }
+  .card .num{ font-family:var(--font-d); font-weight:900; font-size:28px; line-height:1; color:var(--cream); }
+  .card .label{ font-size:9px; letter-spacing:-.04em; white-space:nowrap; }
+  .card.attack{ background:linear-gradient(180deg,#c4573b,var(--terra-dk)); }
+  .card.attack .num{ color:var(--cream); font-size:28px; }
+  .card.attack .label{ color:#ffd9cd; }
+  .card.defense{ background:linear-gradient(180deg,#2c8d85,#175a63); } .card.defense .label{ color:#c8f0eb; }
+  .card.shield{ background:linear-gradient(180deg,#7456a8,var(--coop-dim)); } .card.shield .label{ color:#e6dcff; }
+  .card.via-trade{ box-shadow:inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--gold-dim), 0 0 0 2px var(--coop), 0 6px 12px rgba(0,0,0,.45); }
+  .card.via-trade::after{ background:var(--ink); }
+  #modal-overlay{ background:var(--lattice) 0 0/24px 24px, rgba(5,10,22,.86); }
+  #modal{ position:relative; max-width:360px; padding:30px 20px 20px; background:linear-gradient(180deg,var(--lapis-2),var(--ink)); border:1px solid var(--gold);
+    border-radius:110px 110px 10px 10px / 70px 70px 10px 10px; box-shadow:inset 0 0 0 5px var(--ink), inset 0 0 0 6px var(--gold-dim), 0 20px 50px rgba(0,0,0,.6); }
+  #modal::before{ content:''; display:block; height:12px; margin:-8px auto 4px; width:70%; background:radial-gradient(circle at 50% 0,transparent 5px,var(--gold) 5.5px,var(--gold) 6.5px,transparent 7px) 0 0/14px 12px repeat-x; opacity:.85; }
+  #modal h3{ font-weight:900; text-align:center; color:var(--gold); }
+  #modal p{ text-align:center; }
+  #modal.rules-modal{ border-radius:70px 70px 10px 10px / 46px 46px 10px 10px; }
+  #modal.rules-modal p{ text-align:left; }
+  .rules-scroll{ padding:0 4px; }
+  #modal .row{ flex-direction:column; }
+  #modal button{ flex:none; padding:10px 14px; border-radius:12px; text-align:left; font-family:'Noto Serif KR',serif; cursor:pointer; line-height:1.35; }
+  #modal button small{ display:block; font-family:'IBM Plex Sans KR',sans-serif; font-weight:400; font-size:11.5px; color:var(--cream-dim); }
+  #modal .yes{ background:rgba(6,14,30,.6); color:var(--cream); border:1px solid var(--gold-dim); border-left:6px solid var(--terra); }
+  #modal .lever{ background:linear-gradient(90deg,rgba(227,167,47,.18),rgba(6,14,30,.6)); color:var(--saffron); border:1px solid var(--gold-dim); border-left:6px solid var(--saffron); }
+  #modal .no{ background:rgba(6,14,30,.6); color:var(--cream); border:1px solid var(--gold-dim); border-left:6px solid var(--coop); }
+  #modal .cancel{ text-align:center; background:transparent; color:var(--cream-dim); border:1px solid var(--gold-dim); }
+  .bid-btn{ background:var(--ink); }
+  .bid-value{ font-family:var(--font-d); color:var(--saffron); }
+  .land-name{ color:var(--saffron); }
+  @media (prefers-reduced-motion:reduce){ .card{ transition:none; } .card:hover{ transform:none; } }
+  @media (max-width:380px){ .portal h1{ font-size:23px; } }
 </style>
 </head>
 <body>
@@ -149,6 +236,7 @@ let auctionResultBids = null, auctionResultWinner = null, auctionResultYield = n
 let gameOverWinner = null;
 let gameOverGoal = GOAL_COINS;
 let submittedThisTurn = -1;
+const LEVERAGE_ATTACK_BONUS = 2, LEVERAGE_EXPOSURE_BONUS = 2; // 서버 game-logic.js 상수와 동일하게 유지
 let myBid = 0;
 let bidSubmitted = false;
 let errorMsg = '';
@@ -352,7 +440,11 @@ function updateSeatDOM(circle, tag, local){
   el.classList.toggle('seat-dead', !d.alive);
 }
 function playEvent(circle, ev){
-  if(ev.type === 'guard'){
+  if(ev.type === 'leverage'){
+    floatText(circle, seatCenterPx(circle, ev.tag), '🎲', 'blocked');
+    flashSeat(circle, ev.tag, 'seat-fx-leverage');
+    setAnimStatus(`🎲 ${ev.tag}: 레버리지 선언 (전가 +${LEVERAGE_ATTACK_BONUS} · 받는 부채 +${LEVERAGE_EXPOSURE_BONUS})`);
+  } else if(ev.type === 'guard'){
     floatText(circle, seatCenterPx(circle, ev.tag), '🛡', 'blocked');
     flashSeat(circle, ev.tag, 'seat-fx-guard');
     setAnimStatus(`🟢 ${ev.tag}: 면책으로 자기 방어`);
@@ -366,7 +458,7 @@ function playEvent(circle, ev){
     flashSeat(circle, ev.to, ev.damage > 0 ? 'seat-fx-attack-hit' : 'seat-fx-attack-blocked');
     const label = ev.damage > 0 ? `-${ev.damage}` : (ev.blockedBy === 'guard' ? '🛡무효' : '½감소');
     floatText(circle, seatCenterPx(circle, ev.to), label, ev.damage > 0 ? 'dmg' : 'blocked');
-    setAnimStatus(`🔴 ${ev.from} → ${ev.to}: 부채 전가(${ev.cardValue})${ev.damage > 0 ? ` · 부채 ${ev.damage}` : ' · 무효화'}`);
+    setAnimStatus(`🔴 ${ev.from} → ${ev.to}: ${ev.leverage ? '레버리지 ' : ''}부채 전가(${ev.cardValue})${ev.damage > 0 ? ` · 부채 ${ev.damage}` : ' · 무효화'}`);
   } else if(ev.type === 'defend'){
     flashSeat(circle, ev.tag, 'seat-fx-defend');
     setAnimStatus(`🛡 ${ev.tag}: 보험 가입`);
@@ -478,10 +570,11 @@ function toggleSelect(cardId){
     const lt = nextAliveTag(lastState, myTag);
     showModal({
       title:'이 카드를 어떻게 쓸까요?',
-      body:`부채 전가(${card.value})로 ${lt}에게 부채를 넘길까요, 아니면 밀약으로 ${xt}에 카드를 지원하고 내 부채를 진정시킬까요?`,
+      body:`${lt}에게 부채를 넘길지, 레버리지를 걸고 도박할지, ${xt}에게 밀약으로 넘길지 고르세요.`,
       buttons:[
-        { label:`부채 전가 (${card.value})`, cls:'yes', onClick:()=>submitAction('attack', cardId) },
-        { label:`밀약 (${xt}에 지원)`, cls:'no', onClick:()=>submitAction('trade', cardId) },
+        { label:`부채 전가<small>${lt}에게 부채 ${card.value}</small>`, cls:'yes', onClick:()=>submitAction('attack', cardId) },
+        { label:`레버리지 선언<small>부채 ${card.value+LEVERAGE_ATTACK_BONUS}로 강화 · 이번 턴 내가 받는 부채 +${LEVERAGE_EXPOSURE_BONUS}</small>`, cls:'lever', onClick:()=>submitAction('attack', cardId, true) },
+        { label:`밀약<small>${xt}에게 카드를 넘기고 내 부채 1 진정</small>`, cls:'no', onClick:()=>submitAction('trade', cardId) },
         { label:'취소', cls:'cancel', onClick:()=>{} }
       ]
     });
@@ -510,8 +603,8 @@ function toggleSelect(cardId){
     return;
   }
 }
-function submitAction(type, cardId){
-  socket.emit('submit-action', {type, cardId});
+function submitAction(type, cardId, leverage){
+  socket.emit('submit-action', {type, cardId, leverage: leverage === true});
   submittedThisTurn = lastState.turn;
   render();
 }
@@ -533,10 +626,10 @@ function showRulesModal(){
   const modal = document.getElementById('modal');
   modal.classList.add('rules-modal');
   modal.innerHTML = `
-    <h3>📜 메르칸티스 규칙</h3>
+    <h3>메르칸티스 규칙</h3>
     <div class="rules-scroll">
       <h4>목표</h4>
-      <p><b style="color:var(--gold);">목표 코인을 먼저 모으는 상단이 승리</b>합니다 (3~4인 20 · 5인 18 · 6인 15). 별도의 최종 결전 없이, 아래 루프를 반복하다 목표에 도달하는 순간 게임이 끝납니다.</p>
+      <p><b class="gold">목표 코인을 먼저 모으는 상단이 승리</b>합니다 (3~4인 20 · 5인 18 · 6인 15). 별도의 최종 결전 없이, 아래 루프를 반복하다 목표에 도달하는 순간 게임이 끝납니다.</p>
 
       <h4>전체 흐름</h4>
       <p>체인게임 한 라운드 진행 → 등수별 코인 지급 → 보유 상관 소득 지급 → 목표 도달 확인 → (미도달 시) 상관 경매 1회 → 다시 체인게임... 반복</p>
@@ -555,6 +648,14 @@ function showRulesModal(){
         <tr><td>보험</td><td>12장</td><td>이번 턴 받을 부채 절반 감소</td></tr>
         <tr><td>면책</td><td>12장</td><td>자신에게 적용, 이번 턴 자신이 받는 부채 전가 1회 완전 무효</td></tr>
       </table>
+
+      <h4>레버리지 선언 (도박수)</h4>
+      <ul>
+        <li>부채 전가 카드를 낼 때 <b>레버리지</b>를 걸 수 있습니다. 내가 넘기는 부채가 <b>+2</b> 커집니다.</li>
+        <li>대신 <b>이번 턴 내가 받는 부채도 +2</b>입니다. 오른쪽 상단이 나에게 부채를 전가하면 그 부채가 커집니다.</li>
+        <li>부채 전가 카드에만 걸 수 있습니다. 카드는 한 장만 내므로 보험·면책과 함께 쓸 수 없습니다.</li>
+        <li>면책으로 전가가 막혀도 레버리지 선언은 유지됩니다.</li>
+      </ul>
 
       <h4>파산과 라운드 종료</h4>
       <p>부채가 24 이상이면 즉시 파산합니다. 파산시킨 상단이 남은 손패 절반(올림)을 채권으로 회수합니다. 1개 상단만 남거나, 덱과 전원의 손패가 모두 소진되면 그 라운드가 끝납니다 (후자의 경우 부채가 가장 낮은 쪽이 그 라운드 1위).</p>
@@ -593,15 +694,29 @@ function render(){
   else if(phase==='over') app.innerHTML = overHTML();
   attachHandlers();
 }
+function portal(title, sub, small){
+  const H = small ? 112 : 200, a = small ? [78,52,48,36,22,6] : [100,62,56,42,24,8];
+  return `<div class="portal ${small?'small':''}">
+    <svg class="arch" viewBox="0 0 400 ${H}" aria-hidden="true">
+      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b4175"/><stop offset="1" stop-color="#0c1a33"/></linearGradient></defs>
+      <path d="M20 ${H} V${a[0]} C20 ${a[1]} 62 ${a[2]} 74 ${a[3]} C90 ${a[4]} 200 -2 200 ${a[5]} C200 -2 310 ${a[4]} 326 ${a[3]} C338 ${a[2]} 380 ${a[1]} 380 ${a[0]} V${H} Z" fill="url(#gl)" stroke="#d8b25a" stroke-width="2"/>
+      <circle cx="200" cy="${small?5:7}" r="4" fill="#e3a72f"/>
+      <g fill="#2fa59b" stroke="#d8b25a" stroke-width="1"><path d="M40 ${a[0]+6} l6 6 l-6 6 l-6 -6z"/><path d="M360 ${a[0]+6} l6 6 l-6 6 l-6 -6z"/></g>
+    </svg>
+    <div class="portal-text"><h1>${title}</h1>${sub?`<div class="portal-sub">${sub}</div>`:''}</div>
+  </div>`;
+}
+function orn(){ return '<div class="orn"><i></i></div>'; }
 function connDot(){
   return `<span class="conn-dot ${connected?'conn-ok':'conn-bad'}"></span><span class="sub" style="display:inline;">${connected?'서버 연결됨':'서버 연결 끊김'}</span>`;
 }
 function landingHTML(){
   return `
-    <h1>메르칸티스</h1>
-    <div class="sub">${connDot()}</div>
-    <div class="sub">회원가입 없이, 상단 이름(태그)과 방 코드만으로 참가합니다.</div>
-    <button class="ghost-btn" id="rules-btn">📜 게임 규칙 보기</button>
+    ${portal('MERCANTIS','메르칸티스 · 교역로의 패권')}
+    <div class="sub center">${connDot()}</div>
+    <div class="sub center">회원가입 없이, 상단 이름(태그)과 방 코드만으로 참가합니다.</div>
+    <button class="ghost-btn" id="rules-btn">게임 규칙 보기</button>
+    ${orn()}
     <div class="card-box" style="margin-top:14px;">
       <label class="field-label">우리 상단 이름</label>
       <input class="text-input" id="tag-input" placeholder="예: 발더 상단" maxlength="12">
@@ -626,9 +741,8 @@ function lobbyHTML(){
   const canStart = isHost && lobby.players.length>=3 && lobby.players.length<=6;
   const canAddBot = isHost && lobby.players.length<6;
   return `
-    <h1>상단 연합 대기실</h1>
-    <div class="sub">${connDot()}</div>
-    <div class="sub">이 방 코드를 다른 상단에게 공유하세요.</div>
+    ${portal('대기실','이 방 코드를 다른 상단에게 알려주세요',true)}
+    <div class="sub center">${connDot()}</div>
     <div class="code-display">${roomCode}</div>
     <div class="card-box">${rows}<div class="sub" style="margin-top:8px;">${lobby.players.length}/6개 상단 참가 중 (최소 3개 상단 필요)</div></div>
     ${isHost ? `
@@ -649,7 +763,7 @@ function auctionHTML(){
     <div class="player-row"><span>${t}</span><span>${meta[t].coins}코인 · 상관 ${meta[t].lands.length}개</span></div>
   `).join('');
   return `
-    <h1>🏞 상관 경매</h1>
+    ${portal('상관 경매','',true)}
     <div class="sub">${connDot()}</div>
     <div class="timer" id="turn-timer">⏱ --초</div>
     ${lastRoundMsg?`<div class="sub" style="text-align:center;">${lastRoundMsg}</div>`:''}
@@ -679,7 +793,7 @@ function auctionResultHTML(){
     return `<div class="player-row"><span>${t}${isWinner?' 🏆':''}</span><span>${bidText}</span></div>`;
   }).join('');
   return `
-    <h1>🏞 경매 결과</h1>
+    ${portal('경매 결과','',true)}
     <div class="sub">${connDot()}</div>
     <div class="card-box">
       <div class="land-display">🏞</div>
@@ -748,7 +862,7 @@ function gameHTML(){
     return `<div class="coin-chip${t===myTag?' me':''}">${t} <b>${m.coins}</b>코인</div>`;
   }).join('');
   return `
-    <h1>메르칸티스</h1>
+    <h1 class="title-mini">MERCANTIS</h1>
     <div class="legend">턴 ${state.turn} · 덱 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
     <div class="timer" id="turn-timer">⏱ --초</div>
     ${coinStrip?`<div class="coin-strip">${coinStrip}</div>`:''}
@@ -771,7 +885,7 @@ function overHTML(){
     return `<div class="player-row"><span>${t}${t===gameOverWinner?' 🏆':''}</span><span>${meta[t].coins}코인 · 상관 ${meta[t].lands.length}개</span></div>`;
   }).join('');
   return `
-    <h1>메르칸티스</h1>
+    ${portal('MERCANTIS','',true)}
     <div class="card-box">
       <h3 style="font-family:'Noto Serif KR',serif;margin:0 0 8px;">🏆 ${gameOverWinner}, 목표 코인 ${gameOverGoal} 달성으로 교역의 패자가 되다!</h3>
       <div>${table}</div>

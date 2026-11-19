@@ -330,11 +330,11 @@ io.on('connection', (socket) => {
   });
 
   // 체인게임 카드 액션 제출
-  socket.on('submit-action', ({ type, cardId }) => {
+  socket.on('submit-action', ({ type, cardId, leverage }) => {
     const code = socket.data.code, tag = socket.data.tag;
     const room = rooms[code];
     if (!room || room.status !== 'playing' || !room.state) return;
-    room.pendingActions[tag] = { type, cardId };
+    room.pendingActions[tag] = { type, cardId, leverage: type === 'attack' && leverage === true };
     io.to(code).emit('submission-update', { submittedTags: Object.keys(room.pendingActions) });
     tryResolveTurn(code, false);
   });
