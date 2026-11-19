@@ -212,6 +212,12 @@
   .bid-btn{ background:var(--ink); }
   .bid-value{ font-family:var(--font-d); color:var(--saffron); }
   .land-name{ color:var(--saffron); }
+  /* 게임 화면: 무늬 배경 위에 얹는 불투명 게임 판 */
+  .board{ position:relative; padding:14px 12px 10px; margin:-6px -6px 0; border:1px solid var(--gold-dim); border-radius:28px 28px 14px 14px;
+    background:linear-gradient(180deg,#14305c 0%,#0e2142 55%,#0b1a35 100%);
+    box-shadow:inset 0 0 0 4px #0b1a35, inset 0 0 0 5px rgba(216,178,90,.4), 0 14px 36px rgba(0,0,0,.55); }
+  .board .seat-circle::before{ background:none; border:1px solid rgba(216,178,90,.28); opacity:1; }
+  .board #log{ background:rgba(5,12,26,.7); }
   @media (prefers-reduced-motion:reduce){ .card{ transition:none; } .card:hover{ transform:none; } }
   @media (max-width:380px){ .portal h1{ font-size:23px; } }
 </style>
@@ -862,6 +868,7 @@ function gameHTML(){
     return `<div class="coin-chip${t===myTag?' me':''}">${t} <b>${m.coins}</b>코인</div>`;
   }).join('');
   return `
+    <div class="board">
     <h1 class="title-mini">MERCANTIS</h1>
     <div class="legend">턴 ${state.turn} · 덱 ${state.deck.length}장 남음 · 방코드 ${roomCode} · ${connDot()}</div>
     <div class="timer" id="turn-timer">⏱ --초</div>
@@ -877,6 +884,7 @@ function gameHTML(){
     <div id="status-line">${statusText}</div>
     <div id="log">${state.log.slice(-30).map(m=>`<div>${m}</div>`).join('')}</div>
     <div id="hand">${handHTML || '<div class="sub">해당 없음</div>'}</div>
+    </div>
   `;
 }
 function overHTML(){
